@@ -359,6 +359,7 @@
       </div>
     </div>
     <div class="status-pill" id="saveStatus"><span class="dot"></span><span id="saveStatusText">Loaded</span></div>
+    <button class="btn ghost sm" id="backupBtn" style="border-color:#3a4658; color:#c8cfd3;">Download backup</button>
     <button class="btn ghost sm" id="logoutBtn" style="border-color:#3a4658; color:#c8cfd3;">Log out</button>
   </div>
   <nav class="tabs" id="tabNav">
@@ -1864,6 +1865,47 @@ $('#loginForm').addEventListener('submit', async (e) => {
 $('#logoutBtn').addEventListener('click', async () => {
   if(!sb) return;
   await sb.auth.signOut();
+});
+
+/* ---------------- full backup export (.xlsx) ---------------- */
+$('#backupBtn').addEventListener('click', () => {
+  if(!bills.length){
+    toast('Nothing to back up yet — the ledger is empty.');
+    return;
+  }
+
+  const billRows = [...bills]
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''))
+    .map(b => ({
+      'Company': b.company, 'Date': b.date, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer,
+      'Total Amount': toNum(b.totalAmount),
+      'Delivery Date': b.deliveryDate, 'Area': b.area, 'Sales Person': b.salesPerson,
+      'Delivery Partner': b.deliveryPartner, 'Delivery Status': b.deliveryStatus,
+      'Amount Collected': b.amountAtDelivery === '' ? '' : toNum(b.amountAtDelivery),
+      'Discount': b.discount === '' ? '' : toNum(b.discount),
+      'Comments': b.comments, 'Next Visit Planned': b.nextVisitPlanned,
+      'Total Collected': totalCollected(b), 'Balance Outstanding': balanceOutstanding(b),
+      'Settlement Status': settlementStatus(b)
+    }));
+
+  const visitRows = [];
+  [...bills].sort((a,b) => (a.date||'').localeCompare(b.date||'')).forEach(b => {
+    (b.visits||[]).forEach(v => {
+      visitRows.push({
+        'Company': b.company, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer,
+        'Visit Date': v.date, 'Assigned To': v.assignedTo, 'Status': v.status,
+        'Amount Collected': toNum(v.amount), 'Notes': v.notes
+      });
+    });
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(billRows), 'Delivery Details');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(visitRows.length ? visitRows : [{'Note':'No collection visits logged yet'}]), 'Collection Visits');
+
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Shree_Radhe_Ledger_Backup_${today}.xlsx`);
+  toast(`Backup downloaded — ${billRows.length} bills, ${visitRows.length} visits.`);
 });
 
 checkAuthAndBoot();

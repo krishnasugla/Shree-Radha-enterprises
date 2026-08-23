@@ -212,6 +212,39 @@
   .visit-add-form label{margin-bottom:4px;}
   .visit-add-form > div{min-width:120px;}
 
+  .auth-gate{
+    position:fixed; inset:0; z-index:200; display:none;
+    background:var(--ink); color:#f2efe6;
+    align-items:center; justify-content:center; flex-direction:column; gap:28px;
+    padding:24px;
+  }
+  .auth-card{
+    background:#1e2938; border:1px solid #303e50; border-radius:14px;
+    padding:36px 34px; width:100%; max-width:360px; box-shadow:0 20px 60px rgba(0,0,0,.35);
+  }
+  .auth-brand{display:flex; align-items:baseline; gap:10px; margin-bottom:6px;}
+  .auth-brand h1{font-size:16px; font-weight:600; margin:0;}
+  .auth-sub{color:#9aa4ae; font-size:12.5px; font-family:'IBM Plex Mono'; margin-bottom:24px;}
+  .auth-graphic{display:block; margin:0 auto 26px auto; width:100%; max-width:260px;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#9aa4ae; display:block; margin-bottom:6px;}
+  .auth-field input{
+    width:100%; padding:10px 12px; border-radius:6px; border:1px solid #3a4658;
+    background:#141c27; color:#f2efe6; font-size:14px; font-family:'IBM Plex Sans';
+  }
+  .auth-field input:focus{outline:2px solid var(--amber); outline-offset:0; border-color:var(--amber);}
+  .auth-submit{
+    width:100%; margin-top:6px; background:var(--amber); color:#412402; border:none;
+    font-weight:600; font-size:14px; padding:11px; border-radius:6px; cursor:pointer;
+  }
+  .auth-submit:hover{background:#dca03e;}
+  .auth-submit:disabled{opacity:.6; cursor:not-allowed;}
+  .auth-error{
+    margin-top:12px; font-size:12.5px; color:#ffb4a8; background:rgba(232,89,60,.12);
+    border:1px solid rgba(232,89,60,.35); padding:8px 10px; border-radius:6px;
+  }
+
+
   .combo{position:relative;}
   .combo-input{width:100%; min-width:112px;}
   .combo-input.invalid{border-color:var(--brick) !important; background:var(--brick-tint);}
@@ -254,6 +287,38 @@
 </head>
 <body>
 
+<div class="auth-gate" id="authGate">
+  <div class="auth-card">
+    <svg class="auth-graphic" viewBox="0 0 260 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18,96 Q75,34 132,74 T244,36" stroke="#1D9E75" stroke-width="3" stroke-dasharray="7 7" fill="none"/>
+      <circle cx="18" cy="96" r="6" fill="#EF9F27"/>
+      <circle cx="132" cy="74" r="6" fill="#EF9F27"/>
+      <circle cx="244" cy="36" r="12" fill="#1D9E75"/>
+      <path d="M238,36 l4,5 l9,-11" stroke="#0B1420" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="8" y="106" width="26" height="18" rx="3" fill="#2A3546"/>
+      <line x1="13" y1="112" x2="29" y2="112" stroke="#5C6B80" stroke-width="1.5"/>
+      <line x1="13" y1="117" x2="24" y2="117" stroke="#5C6B80" stroke-width="1.5"/>
+    </svg>
+    <div class="auth-brand">
+      <span class="mark"></span>
+      <h1>Shree Radhe Enterprises</h1>
+    </div>
+    <div class="auth-sub">Sign in to the ledger</div>
+    <form id="loginForm">
+      <div class="auth-field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" autocomplete="username" required>
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="auth-submit">Sign in</button>
+      <div class="auth-error" id="loginError" hidden></div>
+    </form>
+  </div>
+</div>
+
 <header class="app">
   <div class="app-top">
     <div class="brand">
@@ -264,6 +329,7 @@
       </div>
     </div>
     <div class="status-pill" id="saveStatus"><span class="dot"></span><span id="saveStatusText">Loaded</span></div>
+    <button class="btn ghost sm" id="logoutBtn" style="border-color:#3a4658; color:#c8cfd3;">Log out</button>
   </div>
   <nav class="tabs" id="tabNav">
     <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
@@ -1716,7 +1782,61 @@ function renderAll(){
   renderTab($('#tabNav button.active')?.dataset.tab || 'import');
 }
 
-loadData();
+/* ---------------- auth gate (Supabase Auth) ---------------- */
+function showAuthGate(){
+  $('#authGate').style.display = 'flex';
+  $('header.app').style.display = 'none';
+  $('main').style.display = 'none';
+}
+function hideAuthGate(){
+  $('#authGate').style.display = 'none';
+  $('header.app').style.display = '';
+  $('main').style.display = '';
+}
+
+async function checkAuthAndBoot(){
+  if(!sb){
+    // Supabase isn't configured at all -- nothing to authenticate against, just boot.
+    hideAuthGate();
+    loadData();
+    return;
+  }
+  try{
+    const { data: { session } } = await sb.auth.getSession();
+    if(session){ hideAuthGate(); loadData(); }
+    else { showAuthGate(); }
+  }catch(e){
+    console.error(e);
+    showAuthGate();
+  }
+  sb.auth.onAuthStateChange((event) => {
+    if(event === 'SIGNED_IN'){ hideAuthGate(); loadData(); }
+    else if(event === 'SIGNED_OUT'){ bills = []; showAuthGate(); }
+  });
+}
+
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('#loginEmail').value.trim();
+  const password = $('#loginPassword').value;
+  const errEl = $('#loginError');
+  const btn = $('#loginForm .auth-submit');
+  errEl.hidden = true;
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = 'Sign in';
+  if(error){
+    errEl.textContent = /invalid/i.test(error.message) ? 'Wrong email or password.' : error.message;
+    errEl.hidden = false;
+  }
+});
+
+$('#logoutBtn').addEventListener('click', async () => {
+  if(!sb) return;
+  await sb.auth.signOut();
+});
+
+checkAuthAndBoot();
 </script>
 </body>
 </html>

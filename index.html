@@ -524,8 +524,8 @@ function parseDateLoose(v){
 
    REQUIRED SETUP — fill these in after creating your Supabase project
    (Project Settings → API): */
-const SUPABASE_URL = https://dakwwhbswakyorffpiom.supabase.co/;       // e.g. https://xxxxxxxx.supabase.co
-const SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs;
+const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co';       // e.g. https://xxxxxxxx.supabase.co
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs';
 const sb = (SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY.length > 20)
   ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;

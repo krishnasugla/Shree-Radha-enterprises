@@ -301,6 +301,7 @@
   }
   .file-chip button{background:none;border:none;color:var(--teal-dark);cursor:pointer;font-size:14px;line-height:1;padding:0;}
   .map-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:14px;}
+  .map-section-label{grid-column:1/-1; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-top:4px;}
   .map-field label{margin-bottom:4px;}
   .map-field select{width:100%;}
   details.manual-import{margin-top:18px;}
@@ -431,7 +432,7 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
       <div id="dupWarnBox"></div>
       <div class="table-wrap" style="margin-top:10px; max-height:420px;">
         <table>
-          <thead><tr><th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th></tr></thead>
+          <thead id="previewHead"><tr><th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th></tr></thead>
           <tbody id="previewBody"></tbody>
         </table>
       </div>
@@ -585,7 +586,17 @@ function fmtMoney(n){
   let s = n.toLocaleString('en-IN');
   return (neg ? '(' : '') + '₹' + s + (neg ? ')' : '');
 }
-function toNum(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function toNum(v){
+  if(v === null || v === undefined || v === '') return 0;
+  if(typeof v === 'number') return isNaN(v) ? 0 : v;
+  // strip currency symbols, thousands separators, and whitespace before parsing,
+  // so "12,000" or "₹1,234.50" parse correctly instead of parseFloat silently
+  // truncating at the first comma (parseFloat('12,000') would otherwise be 12).
+  const cleaned = String(v).replace(/[₹,\s]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
 function parseDateLoose(v){
   if(!v) return '';
   if(v instanceof Date && !isNaN(v.getTime())){
@@ -825,12 +836,27 @@ let pendingImport = [];
 let excelState = { rows: [], headerRowIdx: -1, headers: [] };
 
 const FIELD_DEFS = [
-  {key:'company', label:'Company', keywords:['company']},
-  {key:'date', label:'Date', keywords:['date']},
-  {key:'billNo', label:'Vch/Bill No', keywords:['vch','bill','voucher']},
-  {key:'retailer', label:'Retailer', keywords:['retailer','party','customer','shop']},
-  {key:'amount', label:'Total Amount', keywords:['amount','total']},
+  {key:'company', label:'Company', keywords:['company'], required:true},
+  {key:'date', label:'Date', keywords:['date'], required:true},
+  {key:'billNo', label:'Vch/Bill No', keywords:['vch','bill','voucher'], required:true},
+  {key:'retailer', label:'Retailer', keywords:['retailer','party','customer','shop'], required:true},
+  {key:'amount', label:'Total Amount', keywords:['total amount','total'], required:true},
+  {key:'deliveryDate', label:'Delivery Date', keywords:['delivery date'], required:false},
+  {key:'area', label:'Area', keywords:['area'], required:false},
+  {key:'salesPerson', label:'Sales Person', keywords:['sales person','salesperson'], required:false},
+  {key:'deliveryPartner', label:'Delivery Partner', keywords:['delivery partner','delivery boy'], required:false},
+  {key:'deliveryStatus', label:'Delivery Status', keywords:['delivery status','status'], required:false},
+  {key:'amountAtDelivery', label:'Amount Collected', keywords:['amount collected','collected','received'], required:false},
+  {key:'discount', label:'Discount', keywords:['discount'], required:false},
+  {key:'comments', label:'Comments', keywords:['comment','notes','remark'], required:false},
 ];
+
+const STATUS_CANON = {'cash':'Cash','cancelled':'Cancelled','signed':'Signed','cheque':'Cheque','part delivered':'Part Delivered','upi/bank':'UPI/Bank','upi':'UPI/Bank','bank':'UPI/Bank'};
+function canonImportStatus(s){
+  const t = String(s||'').trim();
+  if(!t) return '';
+  return STATUS_CANON[t.toLowerCase()] || t;
+}
 
 function colLetter(i){
   let s=''; i++;
@@ -918,23 +944,33 @@ function buildMappingUI(){
   const headers = excelState.headers;
   const colCount = Math.max(headers.length, 5);
   const grid = $('#mapGrid');
-  grid.innerHTML = FIELD_DEFS.map((f, idx) => {
+
+  function renderField(f, idx){
     const options = [];
     for(let c=0;c<colCount;c++){
       const h = headers[c];
       const label = h ? `${colLetter(c)} — ${h}` : `Column ${colLetter(c)}`;
       options.push({c, label});
     }
-    // guess: keyword match in header, else positional fallback (idx)
-    let guess = options.find(o => f.keywords.some(k => (headers[o.c]||'').toLowerCase().includes(k)));
-    let guessIdx = guess ? guess.c : idx;
+    const guess = options.find(o => f.keywords.some(k => (headers[o.c]||'').toLowerCase().includes(k)));
+    const notInFile = '<option value="-1">— not in this file —</option>';
+    const guessVal = guess ? guess.c : (f.required ? idx : -1);
     return `<div class="map-field">
-      <label>${f.label}</label>
+      <label>${f.label}${f.required ? '' : ' <span style="opacity:.6;">(optional)</span>'}</label>
       <select data-target="${f.key}">
-        ${options.map(o=>`<option value="${o.c}" ${o.c===guessIdx?'selected':''}>${escapeHtml(o.label)}</option>`).join('')}
+        ${f.required ? '' : notInFile}
+        ${options.map(o=>`<option value="${o.c}" ${o.c===guessVal?'selected':''}>${escapeHtml(o.label)}</option>`).join('')}
       </select>
     </div>`;
-  }).join('');
+  }
+
+  const required = FIELD_DEFS.filter(f => f.required);
+  const optional = FIELD_DEFS.filter(f => !f.required);
+  grid.innerHTML =
+    `<div class="map-section-label">Required</div>` +
+    required.map((f,i)=>renderField(f,i)).join('') +
+    `<div class="map-section-label" style="grid-column:1/-1; margin-top:6px;">Optional — only if your file has these</div>` +
+    optional.map((f,i)=>renderField(f,i)).join('');
   $('#mappingBox').style.display = 'block';
 }
 
@@ -942,27 +978,35 @@ $('#buildPreviewBtn').addEventListener('click', () => {
   const mapping = {};
   $$('#mapGrid select').forEach(sel => { mapping[sel.dataset.target] = parseInt(sel.value,10); });
 
+  function cell(r, key){
+    const c = mapping[key];
+    return (c === undefined || c === -1) ? '' : r[c];
+  }
+
   const dataRows = excelState.rows.slice(excelState.headerRowIdx + 1);
   pendingImport = dataRows.map(r => {
-    const company = r[mapping.company];
-    const date = r[mapping.date];
-    const billNo = r[mapping.billNo];
-    const retailer = r[mapping.retailer];
-    const amount = r[mapping.amount];
     return {
       id: uid(),
-      company: String(company||'').trim(),
-      date: excelDateFmt(date),
-      billNo: String(billNo||'').trim(),
-      retailer: String(retailer||'').trim(),
-      totalAmount: toNum(String(amount??'0').replace(/[₹,\s]/g,'')),
-      deliveryDate:'', area:'', salesPerson:'', deliveryPartner:'', deliveryStatus:'',
-      amountAtDelivery:'', comments:'', discount:'',
+      company: String(cell(r,'company')||'').trim(),
+      date: excelDateFmt(cell(r,'date')),
+      billNo: String(cell(r,'billNo')||'').trim(),
+      retailer: String(cell(r,'retailer')||'').trim(),
+      totalAmount: toNum(cell(r,'amount')),
+      deliveryDate: excelDateFmt(cell(r,'deliveryDate')),
+      area: String(cell(r,'area')||'').trim(),
+      salesPerson: String(cell(r,'salesPerson')||'').trim(),
+      deliveryPartner: String(cell(r,'deliveryPartner')||'').trim(),
+      deliveryStatus: canonImportStatus(cell(r,'deliveryStatus')),
+      amountAtDelivery: cell(r,'amountAtDelivery')==='' ? '' : toNum(cell(r,'amountAtDelivery')),
+      comments: String(cell(r,'comments')||'').trim(),
+      discount: cell(r,'discount')==='' ? '' : toNum(cell(r,'discount')),
       visits: [], nextVisitPlanned:''
     };
   }).filter(r => r.company || r.billNo || r.retailer);
 
-  $('#mapInfo').textContent = `${pendingImport.length} rows parsed.`;
+  const extraFieldsUsed = ['deliveryDate','area','salesPerson','deliveryPartner','deliveryStatus','amountAtDelivery','discount','comments']
+    .filter(k => mapping[k] !== -1 && mapping[k] !== undefined);
+  $('#mapInfo').textContent = `${pendingImport.length} rows parsed` + (extraFieldsUsed.length ? ` — including ${extraFieldsUsed.length} extra column${extraFieldsUsed.length===1?'':'s'} beyond the core 5.` : '.');
   renderPreview();
   $('#previewPanel').scrollIntoView({behavior:'smooth', block:'start'});
 });
@@ -1004,6 +1048,14 @@ function renderPreview(){
   const panel = $('#previewPanel');
   if(!pendingImport.length){ panel.style.display='none'; return; }
   panel.style.display = 'block';
+
+  const hasExtra = pendingImport.some(r => r.deliveryDate || r.area || r.salesPerson || r.deliveryPartner || r.deliveryStatus || r.amountAtDelivery !== '' || r.discount !== '' || r.comments);
+
+  $('#previewHead').innerHTML = `<tr>
+    <th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th>
+    ${hasExtra ? '<th>Delivery Date</th><th>Sales Person</th><th>Delivery Partner</th><th>Delivery Status</th>' : ''}
+  </tr>`;
+
   $('#previewBody').innerHTML = pendingImport.map(r => `
     <tr>
       <td>${escapeHtml(r.company)}</td>
@@ -1011,6 +1063,7 @@ function renderPreview(){
       <td>${escapeHtml(r.billNo)}</td>
       <td>${escapeHtml(r.retailer)}</td>
       <td class="num">${fmtMoney(r.totalAmount)}</td>
+      ${hasExtra ? `<td>${escapeHtml(r.deliveryDate)}</td><td>${escapeHtml(r.salesPerson)}</td><td>${escapeHtml(r.deliveryPartner)}</td><td>${escapeHtml(r.deliveryStatus)}</td>` : ''}
     </tr>`).join('');
 
   // duplicate check against existing bills (company+billNo)

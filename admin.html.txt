@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Add Delivery Person</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <style>
+    body{font-family:"IBM Plex Sans",sans-serif;padding:20px;}
+    .card{border:1px solid #ddd;border-radius:8px;padding:20px;margin-top:20px;}
+    label{display:block;margin:8px 0;}
+    input{padding:6px;width:100%;max-width:300px;}
+    button{margin-top:12px;padding:8px 16px;}
+    #result{margin-top:12px;background:#f0f8ff;padding:8px;border-radius:4px;}
+  </style>
+</head>
+<body>
+  <h1>Admin – Add Delivery Person</h1>
+  <div class="card">
+    <label>Name: <input type="text" id="name"></label>
+    <label>Email: <input type="email" id="email"></label>
+    <label>Password: <input type="password" id="pwd"></label>
+    <button id="createBtn">Create Delivery Person</button>
+    <div id="result" class="hidden"></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co/rest/v1/';
+    const SUPABASE_ANON_KEY = 'sb_publishable_IGXZnkTuoAkhJsS9LzrPRw_mZQgf1DT';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function hash(p){ return CryptoJS.SHA256(p).toString(CryptoJS.enc.Hex); }
+
+    document.getElementById('createBtn').onclick = async () => {
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const pwd = document.getElementById('pwd').value;
+      if(!name||!email||!pwd){alert('All fields required');return;}
+
+      // 1️⃣ Insert delivery person
+      const {data:person, error:err1} = await supabase.from('delivery_people')
+        .insert({name, email, password_hash: hash(pwd)})
+        .select()
+        .single();
+      if(err1){alert('Error adding person: '+err1.message);return;}
+
+      // 2️⃣ Generate a token
+      const token = crypto.randomUUID();
+      const {error:err2} = await supabase.from('delivery_tokens')
+        .insert({token, delivery_person_id: person.id});
+      if(err2){alert('Error creating token: '+err2.message);return;}
+
+      // 3️⃣ Show the link
+      const link = `${window.location.origin}/delivery.html?token=${token}`;
+      const resDiv = document.getElementById('result');
+      resDiv.innerHTML = `<strong>Delivery link:</strong> <a href="${link}" target="_blank">${link}</a>`;
+      resDiv.classList.remove('hidden');
+    };
+  </script>
+</body>
+</html>

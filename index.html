@@ -337,8 +337,8 @@
     <div class="auth-sub">Sign in to the ledger</div>
     <form id="loginForm">
       <div class="auth-field">
-        <label>Email</label>
-        <input type="email" id="loginEmail" autocomplete="username" required>
+        <label>Login ID or email</label>
+        <input type="text" id="loginEmail" autocomplete="username" autocapitalize="none" spellcheck="false" required>
       </div>
       <div class="auth-field">
         <label>Password</label>
@@ -1992,9 +1992,14 @@ async function checkAuthAndBoot(){
   });
 }
 
+/* Delivery partners sign in with a Login ID (e.g. mukesh4821). Behind the scenes it is stored
+   as an address on this private domain -- must match LOGIN_DOMAIN in the Edge Function. */
+const PARTNER_LOGIN_DOMAIN = 'delivery.invalid';
+
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = $('#loginEmail').value.trim();
+  let email = $('#loginEmail').value.trim();
+  if(!email.includes('@')) email = email.toLowerCase() + '@' + PARTNER_LOGIN_DOMAIN;
   const password = $('#loginPassword').value;
   const errEl = $('#loginError');
   const btn = $('#loginForm .auth-submit');
@@ -2003,7 +2008,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
   const { error } = await sb.auth.signInWithPassword({ email, password });
   btn.disabled = false; btn.textContent = 'Sign in';
   if(error){
-    errEl.textContent = /invalid/i.test(error.message) ? 'Wrong email or password.' : error.message;
+    errEl.textContent = /invalid/i.test(error.message) ? 'Wrong login ID / email or password.' : error.message;
     errEl.hidden = false;
   }
 });

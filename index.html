@@ -518,6 +518,7 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
           <input type="date" id="agentDateInput">
         </div>
         <span class="footnote" id="agentDateHint" style="align-self:center;"></span>
+        <button class="btn ghost sm" id="agentRefreshBtn" type="button" style="align-self:center;">Refresh</button>
       </div>
     </div>
 
@@ -661,7 +662,7 @@ function rowToBill(r){
     totalAmount: r.total_amount==null?0:Number(r.total_amount), deliveryDate: r.delivery_date||'', area: r.area||'',
     salesPerson: r.sales_person||'', deliveryPartner: r.delivery_partner||'', deliveryStatus: r.delivery_status||'',
     amountAtDelivery: r.amount_at_delivery==null?'':Number(r.amount_at_delivery), comments: r.comments||'',
-    discount: r.discount==null?'':Number(r.discount), nextVisitPlanned: r.next_visit_planned||'', visits: []
+    discount: r.discount==null?'':Number(r.discount), nextVisitPlanned: r.next_visit_planned||'', verified: !!r.verified, visits: []
   };
 }
 function visitToRow(v, billId){
@@ -729,7 +730,13 @@ function scheduleSaveBill(bill){
     const { error } = (userRole === 'delivery')
       ? await sb.from('bills').update({ delivery_date: row.delivery_date, delivery_status: row.delivery_status, amount_at_delivery: row.amount_at_delivery, comments: row.comments }).eq('id', bill.id)
       : await sb.from('bills').upsert(row);
-    if(error){ console.error(error); toast('Save failed — check your connection.'); setSaveStatus('idle', 'Save failed'); }
+    if(error){
+      console.error(error);
+      if(/verified/i.test(error.message||'')){
+        toast('This bill was verified by the office and can no longer be edited.');
+        setSaveStatus('idle', 'Locked'); loadData();
+      } else { toast('Save failed — check your connection.'); setSaveStatus('idle', 'Save failed'); }
+    }
     else setSaveStatus('idle', 'Saved');
   }, 400);
 }
@@ -1120,6 +1127,7 @@ $$('#tabNav button').forEach(btn => {
     $$('.tabview').forEach(v => v.classList.remove('active'));
     $('#tab-' + btn.dataset.tab).classList.add('active');
     renderAll();
+    if(btn.dataset.tab === 'agent' && sb && userRole === 'admin') loadData();   // pick up what partners have just done
   });
 });
 
@@ -1286,35 +1294,61 @@ function renderDelivery(){
 }
 
 /* Delivery partner's own view: only bills assigned to them (the database enforces this too),
-   with just four editable fields. No delete, no import, no other tabs. */
+   filterable by delivery date, with just four editable fields. Verified bills are locked. */
+let dpFilterDate = '';
+function todayLocalISO(){ const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function ensureDpFilterBar(){
+  if($('#dpFilterBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'dpFilterBar';
+  bar.className = 'panel';
+  bar.style.cssText = 'padding:12px 16px; margin-bottom:12px;';
+  bar.innerHTML = `<div class="row">
+      <div><label>Delivery date</label><input type="date" id="dpDateFilter"></div>
+      <button class="btn ghost sm" id="dpToday" type="button">Today</button>
+      <button class="btn ghost sm" id="dpAll" type="button">Show all</button>
+    </div>`;
+  $('#deliveryTableWrap').before(bar);
+  const apply = (v) => { dpFilterDate = v; $('#dpDateFilter').value = v; pageState.delivery = 0; renderDelivery(); };
+  $('#dpDateFilter').addEventListener('change', e => apply(e.target.value));
+  $('#dpToday').addEventListener('click', () => apply(todayLocalISO()));
+  $('#dpAll').addEventListener('click', () => apply(''));
+}
 function renderDeliveryPartnerView(){
-  const mine = [...bills].sort((a,b) => (a.date||'').localeCompare(b.date||'')).reverse();
-  $('#deliveryCount').textContent = `${mine.length} bills assigned to you`;
+  ensureDpFilterBar();
+  const mine = bills.filter(b => !dpFilterDate || b.deliveryDate === dpFilterDate)
+    .sort((a,b) => (a.date||'').localeCompare(b.date||'')).reverse();
+  $('#deliveryCount').textContent = dpFilterDate
+    ? `${mine.length} of ${bills.length} bills · delivery date ${dpFilterDate}`
+    : `${bills.length} bills assigned to you`;
   const wrap = $('#deliveryTableWrap');
   if(!mine.length){
-    wrap.innerHTML = emptyState('No bills assigned yet', 'Bills the office assigns to you will show up here.');
+    wrap.innerHTML = bills.length
+      ? emptyState('No bills for this date', 'Pick another delivery date, or press “Show all”.')
+      : emptyState('No bills assigned yet', 'Bills the office assigns to you will show up here.');
     $('#deliveryPager').innerHTML = '';
     return;
   }
   const {slice} = paginate(mine, 'delivery');
-  const rows = slice.map(b => `<tr data-id="${b.id}">
+  const rows = slice.map(b => { const lock = b.verified ? 'disabled' : ''; return `<tr data-id="${b.id}">
       <td>${escapeHtml(b.company)}</td>
       <td class="mono">${escapeHtml(b.date)}</td>
       <td>${escapeHtml(b.billNo)}</td>
       <td>${escapeHtml(b.retailer)}</td>
       <td class="num mono">${fmtMoney(b.totalAmount)}</td>
       <td>${escapeHtml(b.area||'')}</td>
-      <td><input type="date" data-field="deliveryDate" value="${b.deliveryDate||''}"></td>
-      <td><select data-field="deliveryStatus">${STATUS_OPTIONS.map(o=>`<option value="${o}" ${b.deliveryStatus===o?'selected':''}>${o||'—'}</option>`).join('')}</select></td>
-      <td><input type="number" class="num" data-field="amountAtDelivery" value="${b.amountAtDelivery??''}" style="min-width:90px;"></td>
+      <td><input type="date" data-field="deliveryDate" value="${b.deliveryDate||''}" ${lock}></td>
+      <td><select data-field="deliveryStatus" ${lock}>${STATUS_OPTIONS.map(o=>`<option value="${o}" ${b.deliveryStatus===o?'selected':''}>${o||'—'}</option>`).join('')}</select></td>
+      <td><input type="number" class="num" data-field="amountAtDelivery" value="${b.amountAtDelivery??''}" style="min-width:90px;" ${lock}></td>
       <td class="num mono">${b.discount===''?'':fmtMoney(b.discount)}</td>
-      <td><input type="text" data-field="comments" value="${escapeHtml(b.comments||'')}" style="min-width:110px;"></td>
+      <td><input type="text" data-field="comments" value="${escapeHtml(b.comments||'')}" style="min-width:110px;" ${lock}></td>
       <td class="num mono">${fmtMoney(balanceOutstanding(b))}</td>
-    </tr>`).join('');
+      <td>${b.verified ? '<span class="badge settled">Verified ✓</span>' : ''}</td>
+    </tr>`; }).join('');
   wrap.innerHTML = `<table>
     <thead><tr>
       <th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th><th>Area</th>
-      <th>Delivery Date</th><th>Delivery Status</th><th class="num">Amount Collected</th><th class="num">Discount</th><th>Comments</th><th class="num">Balance</th>
+      <th>Delivery Date</th><th>Delivery Status</th><th class="num">Amount Collected</th><th class="num">Discount</th><th>Comments</th><th class="num">Balance</th><th>Office check</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
@@ -1659,10 +1693,61 @@ function wireVisitLogPanel(tr, bill){
 /* ============================================================
    RENDER: Daily Agent Report
    ============================================================ */
+const agentExpanded = new Set();   // delivery partners whose bill list is open in the Daily Agent Report
+
+/* Verify = lock bills so the delivery partner can't edit them any more (enforced by the database).
+   Before locking, re-read those bills: if the partner changed something after this page loaded,
+   refresh instead, so you never verify numbers you haven't seen. */
+async function setVerified(ids, value){
+  if(!sb || !ids.length) return;
+  setSaveStatus('saving', 'Saving…');
+  if(value){
+    const { data: fresh, error: fe } = await sb.from('bills')
+      .select('id,delivery_date,delivery_status,amount_at_delivery,comments').in('id', ids);
+    if(fe){ toast('Could not check the bills — ' + fe.message); setSaveStatus('idle', 'Failed'); return; }
+    const changed = (fresh||[]).some(r => {
+      const b = bills.find(x => x.id === r.id); if(!b) return false;
+      const row = billToRow(b);
+      return ['delivery_date','delivery_status','amount_at_delivery','comments'].some(k => (row[k] ?? null) !== (r[k] ?? null));
+    });
+    if(changed){
+      await loadData();
+      toast('The delivery partner changed some of these bills after you opened the page. Refreshed — please review and verify again.');
+      return;
+    }
+  }
+  const { data: { session } } = await sb.auth.getSession();
+  const patch = value
+    ? { verified: true, verified_at: new Date().toISOString(), verified_by: session?.user?.id ?? null }
+    : { verified: false, verified_at: null, verified_by: null };
+  const { error } = await sb.from('bills').update(patch).in('id', ids);
+  if(error){ console.error(error); toast('Could not update verification — ' + error.message); setSaveStatus('idle', 'Failed'); return; }
+  bills.forEach(b => { if(ids.includes(b.id)) b.verified = value; });
+  setSaveStatus('idle', 'Saved');
+  toast(value ? `${ids.length} bill${ids.length===1?'':'s'} verified and locked.` : 'Verification removed — the partner can edit again.');
+  renderAgent();
+}
+
 function renderAgent(){
   const dateInput = $('#agentDateInput');
   if(!dateInput._wired){
     dateInput.addEventListener('change', renderAgent);
+    $('#agentRefreshBtn').addEventListener('click', () => loadData());
+    $('#agentPartnerWrap').addEventListener('click', (e) => {
+      const btn = e.target.closest('button'); if(!btn) return;
+      const d = btn.dataset;
+      if(d.expand !== undefined){
+        agentExpanded.has(d.expand) ? agentExpanded.delete(d.expand) : agentExpanded.add(d.expand);
+        renderAgent();
+      } else if(d.verify){ setVerified([d.verify], true); }
+      else if(d.unverify){
+        if(confirm('Remove verification? The delivery partner will be able to edit this bill again.')) setVerified([d.unverify], false);
+      } else if(d.verifyAll !== undefined){
+        const date = $('#agentDateInput').value;
+        const ids = bills.filter(b => (b.deliveryPartner||'').trim() === d.verifyAll && b.deliveryDate === date && !b.verified).map(b => b.id);
+        if(ids.length && confirm(`Verify ${ids.length} bill${ids.length===1?'':'s'} for ${d.verifyAll}? They will no longer be able to edit them.`)) setVerified(ids, true);
+      }
+    });
     dateInput._wired = true;
   }
   if(!dateInput.value){
@@ -1711,30 +1796,68 @@ function renderAgent(){
     return groups;
   }
 
-  function renderGroupTable(groups, label){
+  function renderPartnerDetail(name, pBills){
+    const unverified = pBills.filter(b => !b.verified);
+    const noDate = bills.filter(b => (b.deliveryPartner||'').trim() === name && !b.deliveryDate).length;
+    const body = pBills.map(b => `<tr>
+        <td>${escapeHtml(b.billNo)}</td><td>${escapeHtml(b.retailer)}</td>
+        <td class="num mono">${fmtMoney(b.totalAmount)}</td>
+        <td>${b.deliveryStatus ? `<span class="badge ${badgeClass(b.deliveryStatus)}">${escapeHtml(b.deliveryStatus)}</span>` : '<span class="footnote">not updated</span>'}</td>
+        <td class="num mono">${b.amountAtDelivery === '' ? '—' : fmtMoney(b.amountAtDelivery)}</td>
+        <td class="num mono">${b.discount === '' ? '—' : fmtMoney(b.discount)}</td>
+        <td class="num mono">${fmtMoney(balanceOutstanding(b))}</td>
+        <td>${escapeHtml(b.comments||'')}</td>
+        <td style="white-space:nowrap;">${b.verified
+          ? `<span class="badge settled">Verified ✓</span> <button class="btn ghost sm" data-unverify="${b.id}">Undo</button>`
+          : `<button class="btn primary sm" data-verify="${b.id}">Verify</button>`}</td>
+      </tr>`).join('');
+    const table = pBills.length ? `<div style="overflow-x:auto;"><table>
+        <thead><tr><th>Bill No</th><th>Retailer</th><th class="num">Total</th><th>Status</th><th class="num">Collected</th><th class="num">Discount</th><th class="num">Balance</th><th>Comments</th><th>Office check</th></tr></thead>
+        <tbody>${body}</tbody></table></div>`
+      : `<div class="footnote">No bills for ${escapeHtml(name)} on this date.</div>`;
+    return `<tr><td colspan="9" style="background:#faf8f2; padding:12px 16px;">
+      <div class="flex-between" style="margin-bottom:8px;">
+        <strong>${escapeHtml(name)} — bills for ${escapeHtml(selDate)}</strong>
+        ${unverified.length ? `<button class="btn primary sm" data-verify-all="${escapeHtml(name)}">Verify all (${unverified.length})</button>` : (pBills.length ? '<span class="badge settled">All verified ✓</span>' : '')}
+      </div>
+      ${table}
+      <div class="footnote">Verifying locks a bill: the delivery partner can no longer edit it. “Undo” unlocks it.${noDate ? ` ${noDate} bill${noDate===1?'':'s'} assigned to ${escapeHtml(name)} ${noDate===1?'has':'have'} no delivery date yet and ${noDate===1?'isn\'t':'aren\'t'} listed here.` : ''}</div>
+    </td></tr>`;
+  }
+
+  function renderGroupTable(groups, label, expandable){
     const keys = Object.keys(groups).sort();
     if(!keys.length) return emptyState('Nothing to show', `No ${label.toLowerCase()} activity on this date.`);
     let totals = {cash:0,cashCount:0,bank:0,signedCount:0,totalValue:0,totalBills:0};
     const rows = keys.map(k => {
       const g = groups[k];
       Object.keys(totals).forEach(t => totals[t]+=g[t]);
-      return `<tr><td>${escapeHtml(k)}</td>
+      let extraHead = '', extraTail = '', detail = '';
+      if(expandable){
+        const pBills = dayBills.filter(b => (b.deliveryPartner||'').trim() === k);
+        const done = pBills.filter(b => b.verified).length;
+        const open = agentExpanded.has(k);
+        extraHead = `<td><button class="btn ghost sm" data-expand="${escapeHtml(k)}" title="Show the bills">${open ? '▾' : '▸'}</button></td>`;
+        extraTail = `<td>${pBills.length ? `<span class="badge ${done===pBills.length ? 'settled' : 'pending'}">${done}/${pBills.length} verified</span>` : ''}</td>`;
+        if(open) detail = renderPartnerDetail(k, pBills);
+      }
+      return `<tr>${extraHead}<td>${escapeHtml(k)}</td>
         <td class="num mono">${fmtMoney(g.cash)}</td><td class="num mono">${g.cashCount}</td>
         <td class="num mono">${fmtMoney(g.bank)}</td><td class="num mono">${g.signedCount}</td>
-        <td class="num mono">${fmtMoney(g.totalValue)}</td><td class="num mono">${g.totalBills}</td></tr>`;
+        <td class="num mono">${fmtMoney(g.totalValue)}</td><td class="num mono">${g.totalBills}</td>${extraTail}</tr>${detail}`;
     }).join('');
     return `<table>
-      <thead><tr><th>${label}</th><th class="num">Cash Collected</th><th class="num">Cash Bills</th>
-      <th class="num">Bank/UPI Collected</th><th class="num">Signed Bills</th><th class="num">Total Value</th><th class="num">Total Bills</th></tr></thead>
+      <thead><tr>${expandable ? '<th></th>' : ''}<th>${label}</th><th class="num">Cash Collected</th><th class="num">Cash Bills</th>
+      <th class="num">Bank/UPI Collected</th><th class="num">Signed Bills</th><th class="num">Total Value</th><th class="num">Total Bills</th>${expandable ? '<th>Office check</th>' : ''}</tr></thead>
       <tbody>${rows}
-      <tr style="font-weight:700; background:#f1efe7;"><td>TOTAL</td>
+      <tr style="font-weight:700; background:#f1efe7;">${expandable ? '<td></td>' : ''}<td>TOTAL</td>
         <td class="num mono">${fmtMoney(totals.cash)}</td><td class="num mono">${totals.cashCount}</td>
         <td class="num mono">${fmtMoney(totals.bank)}</td><td class="num mono">${totals.signedCount}</td>
-        <td class="num mono">${fmtMoney(totals.totalValue)}</td><td class="num mono">${totals.totalBills}</td></tr>
+        <td class="num mono">${fmtMoney(totals.totalValue)}</td><td class="num mono">${totals.totalBills}</td>${expandable ? '<td></td>' : ''}</tr>
       </tbody></table>`;
   }
 
-  $('#agentPartnerWrap').innerHTML = renderGroupTable(groupBy('deliveryPartner', DELIVERY_PARTNER_OPTIONS), 'Delivery Partner');
+  $('#agentPartnerWrap').innerHTML = renderGroupTable(groupBy('deliveryPartner', DELIVERY_PARTNER_OPTIONS), 'Delivery Partner', true);
   $('#agentSalesWrap').innerHTML = renderGroupTable(groupBy('salesPerson', SALES_PERSON_OPTIONS), 'Sales Person');
 }
 

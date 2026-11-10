@@ -364,28 +364,15 @@
     <button class="btn ghost sm" id="logoutBtn" style="border-color:#3a4658; color:#c8cfd3;">Log out</button>
   </div>
   <nav class="tabs" id="tabNav">
-      <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
-      <button data-tab="delivery"><span class="n">02</span>Delivery Details</button>
-      <button data-tab="signed"><span class="n">03</span>Signed Bills</button>
-      <button data-tab="agent"><span class="n">04</span>Daily Agent Report</button>
-      <button data-tab="settlement"><span class="n">05</span>Settlement Summary</button>
-      <button data-tab="cash"><span class="n">06</span>Cash Collection by Date</button>
-      <button data-tab="admin"><span class="n">07</span>Admin</button>
-    </nav>
-      <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
-      <button data-tab="delivery"><span class="n">02</span>Delivery Details</button>
-      <button data-tab="signed"><span class="n">03</span>Signed Bills</button>
-      <button data-tab="agent"><span class="n">04</span>Daily Agent Report</button>
-      <button data-tab="settlement"><span class="n">05</span>Settlement Summary</button>
-      <button data-tab="cash"><span class="n">06</span>Cash Collection by Date</button>
-      <button data-tab="admin"><span class="n">07</span>Admin</button>
-    </nav>
     <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
     <button data-tab="delivery"><span class="n">02</span>Delivery Details</button>
     <button data-tab="signed"><span class="n">03</span>Signed Bills</button>
     <button data-tab="agent"><span class="n">04</span>Daily Agent Report</button>
     <button data-tab="settlement"><span class="n">05</span>Settlement Summary</button>
     <button data-tab="cash"><span class="n">06</span>Cash Collection by Date</button>
+    
+    <!-- Updated Admin Link -->
+    <button onclick="window.location.href='admin.html';"><span class="n">07</span>Admin Dashboard</button>
   </nav>
 </header>
 
@@ -561,33 +548,6 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
     <div class="table-wrap" id="cashTableWrap"></div>
   </section>
 
-  <!-- ADMIN TAB (new) -->
-  <section class="tabview" id="tab-admin">
-    <h2 class="section-title">Admin – Create Delivery‑Partner User</h2>
-    <div class="panel">
-      <div class="row" style="gap:12px;flex-wrap:wrap;">
-        <div>
-          <label>Name</label>
-          <input type="text" id="adminName" placeholder="John Doe" />
-        </div>
-        <div>
-          <label>Email</label>
-          <input type="email" id="adminEmail" placeholder="john@example.com" />
-        </div>
-        <div>
-          <label>Password</label>
-          <input type="password" id="adminPassword" placeholder="••••••••" />
-        </div>
-      </div>
-      <button class="btn primary" id="adminCreateBtn" style="margin-top:12px;">Create Delivery‑Partner</button>
-      <div id="adminMsg" class="footnote" style="margin-top:8px;"></div>
-    </div>
-  </section>>
-    <h2 class="section-title">Cash &amp; Bank/UPI Collected, by Date</h2>
-    <p class="helptext">Combines bills marked Cash or UPI/Bank (by delivery date) with Signed bills' collection visits logged as Collected— Cash or Collected— Bank (by visit date). Signed-but-pending amounts are excluded — this is money actually in hand, split by how it came in.</p>
-    <div class="table-wrap" id="cashTableWrap"></div>
-  </section>
-
 </main>
 
 <div class="toast" id="toast"></div>
@@ -607,6 +567,7 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
    ========================================================================= */
 
 let bills = [];
+let userRole = null, partnerName = '', enteredFor = null;   // set after login from the user_roles table
 let deliveryRowOrder = [];
 let fillDrag = null;
 let expandedSignedIds = new Set();
@@ -713,6 +674,12 @@ function rowToVisit(r){
   return { id: r.id, date: r.date||'', assignedTo: r.assigned_to||'', status: r.status||'', amount: r.amount==null?0:Number(r.amount), notes: r.notes||'' };
 }
 
+/* Admin: keep the Delivery Partner dropdown in sync with real partner accounts */
+async function loadPartnerNames(){
+  const { data } = await sb.from('user_roles').select('name').eq('role','delivery').eq('active',true);
+  (data||[]).forEach(r => { if(r.name && !DELIVERY_PARTNER_OPTIONS.includes(r.name)) DELIVERY_PARTNER_OPTIONS.push(r.name); });
+}
+
 async function loadData(){
   setSaveStatus('loading', 'Loading…');
   if(!sb){
@@ -729,6 +696,7 @@ async function loadData(){
     ]);
     if(billsRes.error) throw billsRes.error;
     if(visitsRes.error) throw visitsRes.error;
+    if(userRole === 'admin') await loadPartnerNames();
     const visitsByBill = {};
     (visitsRes.data||[]).forEach(vr => {
       (visitsByBill[vr.bill_id] = visitsByBill[vr.bill_id] || []).push(rowToVisit(vr));
@@ -757,7 +725,10 @@ function scheduleSaveBill(bill){
   setSaveStatus('saving', 'Saving…');
   clearTimeout(saveTimers['b_'+bill.id]);
   saveTimers['b_'+bill.id] = setTimeout(async () => {
-    const { error } = await sb.from('bills').upsert(billToRow(bill));
+    const row = billToRow(bill);
+    const { error } = (userRole === 'delivery')
+      ? await sb.from('bills').update({ delivery_date: row.delivery_date, delivery_status: row.delivery_status, amount_at_delivery: row.amount_at_delivery, comments: row.comments }).eq('id', bill.id)
+      : await sb.from('bills').upsert(row);
     if(error){ console.error(error); toast('Save failed — check your connection.'); setSaveStatus('idle', 'Save failed'); }
     else setSaveStatus('idle', 'Saved');
   }, 400);
@@ -1246,6 +1217,7 @@ document.addEventListener('mouseup', () => {
    RENDER: Delivery Details
    ============================================================ */
 function renderDelivery(){
+  if(userRole === 'delivery'){ renderDeliveryPartnerView(); return; }
   $('#deliveryCount').textContent = `${bills.length} bills`;
   const sorted = [...bills].sort((a,b) => (a.date||'').localeCompare(b.date||'') || 0).reverse();
   const {slice} = paginate(sorted, 'delivery');
@@ -1311,6 +1283,43 @@ function renderDelivery(){
   wireComboField(wrap, '.sp-combo', 'salesPerson', SALES_PERSON_OPTIONS, 'Sales Person');
   wireComboField(wrap, '.dp-combo', 'deliveryPartner', DELIVERY_PARTNER_OPTIONS, 'Delivery Partner');
   renderPager($('#deliveryPager'), 'delivery', sorted, renderDelivery);
+}
+
+/* Delivery partner's own view: only bills assigned to them (the database enforces this too),
+   with just four editable fields. No delete, no import, no other tabs. */
+function renderDeliveryPartnerView(){
+  const mine = [...bills].sort((a,b) => (a.date||'').localeCompare(b.date||'')).reverse();
+  $('#deliveryCount').textContent = `${mine.length} bills assigned to you`;
+  const wrap = $('#deliveryTableWrap');
+  if(!mine.length){
+    wrap.innerHTML = emptyState('No bills assigned yet', 'Bills the office assigns to you will show up here.');
+    $('#deliveryPager').innerHTML = '';
+    return;
+  }
+  const {slice} = paginate(mine, 'delivery');
+  const rows = slice.map(b => `<tr data-id="${b.id}">
+      <td>${escapeHtml(b.company)}</td>
+      <td class="mono">${escapeHtml(b.date)}</td>
+      <td>${escapeHtml(b.billNo)}</td>
+      <td>${escapeHtml(b.retailer)}</td>
+      <td class="num mono">${fmtMoney(b.totalAmount)}</td>
+      <td>${escapeHtml(b.area||'')}</td>
+      <td><input type="date" data-field="deliveryDate" value="${b.deliveryDate||''}"></td>
+      <td><select data-field="deliveryStatus">${STATUS_OPTIONS.map(o=>`<option value="${o}" ${b.deliveryStatus===o?'selected':''}>${o||'—'}</option>`).join('')}</select></td>
+      <td><input type="number" class="num" data-field="amountAtDelivery" value="${b.amountAtDelivery??''}" style="min-width:90px;"></td>
+      <td class="num mono">${b.discount===''?'':fmtMoney(b.discount)}</td>
+      <td><input type="text" data-field="comments" value="${escapeHtml(b.comments||'')}" style="min-width:110px;"></td>
+      <td class="num mono">${fmtMoney(balanceOutstanding(b))}</td>
+    </tr>`).join('');
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th><th>Area</th>
+      <th>Delivery Date</th><th>Delivery Status</th><th class="num">Amount Collected</th><th class="num">Discount</th><th>Comments</th><th class="num">Balance</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  wireEditableRows(wrap, mine);
+  renderPager($('#deliveryPager'), 'delivery', mine, renderDelivery);
 }
 
 function wireComboField(wrap, selectorClass, field, options, label){
@@ -1921,6 +1930,42 @@ function hideAuthGate(){
   $('main').style.display = '';
 }
 
+/* Only accounts listed in user_roles (admin or an active delivery partner) get in.
+   Anyone else is signed straight back out. */
+async function enterApp(session){
+  if(enteredFor === session.user.id) return;
+  const { data: roleRow, error } = await sb.from('user_roles')
+    .select('role,name,active').eq('user_id', session.user.id).maybeSingle();
+  if(error || !roleRow || !roleRow.active || !['admin','delivery'].includes(roleRow.role)){
+    await sb.auth.signOut();
+    const errEl = $('#loginError');
+    errEl.textContent = 'This account does not have access. Please contact the administrator.';
+    errEl.hidden = false;
+    return;
+  }
+  enteredFor = session.user.id;
+  userRole = roleRow.role;
+  partnerName = roleRow.name || '';
+  applyRoleUI();
+  hideAuthGate();
+  loadData();
+}
+
+function applyRoleUI(){
+  if(userRole !== 'delivery') return;
+  $$('#tabNav button').forEach(b => {
+    const isDelivery = b.dataset.tab === 'delivery';
+    b.style.display = isDelivery ? '' : 'none';
+    b.classList.toggle('active', isDelivery);
+  });
+  $$('.tabview').forEach(v => v.classList.toggle('active', v.id === 'tab-delivery'));
+  $('#backupBtn').style.display = 'none';
+  const title = $('#tab-delivery .section-title');
+  if(title) title.textContent = 'My deliveries' + (partnerName ? ' — ' + partnerName : '');
+  const hint = $('#tab-delivery .helptext');
+  if(hint) hint.textContent = 'These are the bills assigned to you. Update the delivery date, status, amount collected and comments as you deliver.';
+}
+
 async function checkAuthAndBoot(){
   if(!sb){
     // Supabase isn't configured at all -- nothing to authenticate against, just boot.
@@ -1930,15 +1975,20 @@ async function checkAuthAndBoot(){
   }
   try{
     const { data: { session } } = await sb.auth.getSession();
-    if(session){ hideAuthGate(); loadData(); }
+    if(session){ await enterApp(session); }
     else { showAuthGate(); }
   }catch(e){
     console.error(e);
     showAuthGate();
   }
-  sb.auth.onAuthStateChange((event) => {
-    if(event === 'SIGNED_IN'){ hideAuthGate(); loadData(); }
-    else if(event === 'SIGNED_OUT'){ bills = []; showAuthGate(); }
+  sb.auth.onAuthStateChange((event, session) => {
+    // setTimeout: supabase-js can deadlock if you call it again inside this callback
+    if(event === 'SIGNED_IN' && session){ setTimeout(() => enterApp(session), 0); }
+    else if(event === 'SIGNED_OUT'){
+      const wasIn = enteredFor !== null;
+      bills = []; enteredFor = null; userRole = null; showAuthGate();
+      if(wasIn) location.reload();   // clears any role-specific screen state
+    }
   });
 }
 

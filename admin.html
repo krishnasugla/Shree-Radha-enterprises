@@ -1,245 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Admin – Add Delivery Person</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Netflix-style fonts -->
-  <link rel="preconnect" href="https://googleapis.com">
-  <link rel="preconnect" href="https://gstatic.com" crossorigin>
-  <link href="https://googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-  <style>
-    /* Netflix cinematic dark theme */
-    :root {
-      --netflix-red: #E50914;
-      --netflix-dark-red: #B81D24;
-      --bg-gradient: radial-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.9)), url('https://nflxext.com');
-    }
-
-    body {
-      font-family: 'Roboto', sans-serif;
-      background: #000;
-      background-image: var(--bg-gradient);
-      background-size: cover;
-      background-position: center;
-      background-attachment: fixed;
-      color: #fff;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-
-    /* Top Navigation bar mimicking Netflix branding header */
-    header {
-      padding: 20px 60px;
-      display: flex;
-      align-items: center;
-    }
-
-    .logo {
-      color: var(--netflix-red);
-      font-size: 2.2rem;
-      font-weight: 700;
-      letter-spacing: -1px;
-      text-transform: uppercase;
-      text-decoration: none;
-    }
-
-    /* Main Container */
-    .wrapper {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-    }
-
-    /* Sign-in style adaptive card container */
-    .card {
-      background: rgba(0, 0, 0, 0.75);
-      border-radius: 4px;
-      padding: 60px;
-      width: 100%;
-      max-width: 450px;
-      box-sizing: border-box;
-      border: none;
-      margin: 0 auto;
-    }
-
-    h1 {
-      font-size: 2rem;
-      font-weight: 700;
-      margin-top: 0;
-      margin-bottom: 28px;
-    }
-
-    /* Floating-style form entry fields */
-    .input-group {
-      position: relative;
-      margin-bottom: 16px;
-    }
-
-    input {
-      width: 100%;
-      padding: 16px 20px;
-      background: #333;
-      border: none;
-      border-radius: 4px;
-      color: #fff;
-      font-size: 1rem;
-      box-sizing: border-box;
-      transition: background 0.2s ease;
-    }
-
-    input:focus {
-      background: #454545;
-      outline: none;
-    }
-
-    /* Label overlay mimicking login inputs */
-    label {
-      display: none; 
-    }
-
-    /* Primary Netflix CTA Button */
-    button {
-      width: 100%;
-      padding: 16px;
-      background-color: var(--netflix-red);
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      font-size: 1rem;
-      font-weight: 700;
-      margin-top: 24px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-
-    button:hover {
-      background-color: var(--netflix-dark-red);
-    }
-
-    /* Generated Output Section layout styling */
-    #result {
-      margin-top: 24px;
-      background: #181818;
-      border-left: 4px solid var(--netflix-red);
-      padding: 16px;
-      border-radius: 4px;
-      font-size: 0.9rem;
-      word-break: break-all;
-      line-height: 1.4;
-    }
-
-    #result strong {
-      color: #aaa;
-      display: block;
-      margin-bottom: 6px;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    #result a {
-      color: #0071eb;
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    #result a:hover {
-      text-decoration: underline;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    /* Utility spacing styling */
-    .form-footer {
-      color: #737373;
-      font-size: 0.9rem;
-      margin-top: 30px;
-    }
-
-    .form-footer span {
-      color: #fff;
-    }
-
-    @media (max-width: 500px) {
-      header { padding: 20px; }
-      .card { padding: 40px 20px; }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin – Delivery Partners</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--ink:#182230;--ink-soft:#4b5768;--line:#dfdcd3;--paper:#f6f4ee;--teal:#0e6b5e;--teal-dark:#0a4f45;--amber:#c98a2c;--brick:#a8402b;--green:#3f8f5f;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans',-apple-system,sans-serif;}
+  header{background:var(--ink);color:#f2efe6;padding:14px 24px;display:flex;align-items:center;gap:16px;}
+  header h1{font-size:16px;margin:0;font-weight:600;flex:1;}
+  header a{color:#c8cfd3;font-size:13px;text-decoration:none;border:1px solid #3a4658;padding:6px 12px;border-radius:6px;}
+  main{max-width:880px;margin:24px auto;padding:0 16px;}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px;margin-bottom:20px;box-shadow:0 1px 2px rgba(24,34,48,.05);}
+  h2{font-size:15px;margin:0 0 14px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:5px;}
+  input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:14px;}
+  input:focus{outline:2px solid var(--amber);border-color:var(--amber);}
+  button{font:inherit;font-size:13px;font-weight:600;border-radius:6px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);}
+  button.primary{background:var(--teal);border-color:var(--teal);color:#fff;margin-top:14px;}
+  button.primary:hover{background:var(--teal-dark);}
+  button:disabled{opacity:.6;cursor:not-allowed;}
+  .msg{margin-top:12px;font-size:13px;padding:9px 12px;border-radius:6px;}
+  .msg.ok{background:#e6f2ea;color:#245c3a;} .msg.err{background:#f8e6e1;color:var(--brick);}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);padding:8px;border-bottom:1px solid var(--line);}
+  td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  td.actions{text-align:right;white-space:nowrap;} td.actions button{margin-left:6px;padding:6px 10px;}
+  .pill{font-size:12px;padding:2px 8px;border-radius:10px;}
+  .pill.on{background:#e6f2ea;color:var(--green);} .pill.off{background:#f8e6e1;color:var(--brick);}
+  .muted{color:var(--ink-soft);font-size:13px;}
+  [hidden]{display:none !important;}
+</style>
 </head>
 <body>
+<header><h1>Admin – Delivery Partners</h1><a href="index.html">← Back to ledger</a></header>
 
-  <header>
-    <a href="index.html" class="logo">Back</a>
-  </header>
-
-  <div class="wrapper">
-    <div class="card">
-      <h1>Add Delivery Person</h1>
-      
-      <div class="input-group">
-        <input type="text" id="name" placeholder="Name" autocomplete="off">
-      </div>
-      
-      <div class="input-group">
-        <input type="email" id="email" placeholder="Email" autocomplete="off">
-      </div>
-      
-      <div class="input-group">
-        <input type="password" id="pwd" placeholder="Password">
-      </div>
-      
-      <button id="createBtn">Create Account</button>
-      
-      <div id="result" class="hidden"></div>
-
-      <div class="form-footer">
-        Administrator Console. New profiles reflect instantly on live <span>delivery systems</span>.
-      </div>
+<main id="app" hidden>
+  <div class="panel">
+    <h2>Add delivery partner</h2>
+    <div class="grid">
+      <div><label for="name">Name</label><input id="name" autocomplete="off" placeholder="e.g. Mukesh"></div>
+      <div><label for="email">Email (their login)</label><input id="email" type="email" autocomplete="off"></div>
+      <div><label for="pwd">Password (min 8 characters)</label><input id="pwd" type="text" autocomplete="off"></div>
     </div>
+    <button class="primary" id="createBtn">Create account</button>
+    <div class="msg" id="createMsg" hidden></div>
+    <p class="muted">The name you enter here is what appears in the ledger's Delivery Partner column. Bills assigned to that name are the only bills this person will see.</p>
   </div>
 
-  <script>
-    const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co/rest/v1/';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  <div class="panel">
+    <h2>Delivery partners</h2>
+    <div id="list" class="muted">Loading…</div>
+  </div>
+</main>
 
-    function hash(p){ return CryptoJS.SHA256(p).toString(CryptoJS.enc.Hex); }
+<script>
+const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-    document.getElementById('createBtn').onclick = async () => {
-      const name = document.getElementById('name').value.trim();
-      const email = document.getElementById('email').value.trim();
-      const pwd = document.getElementById('pwd').value;
-      if(!name||!email||!pwd){alert('All fields required');return;}
+function show(el, text, ok){ el.textContent = text; el.className = 'msg ' + (ok ? 'ok' : 'err'); el.hidden = false; }
 
-      // 1️⃣ Insert delivery person
-      const {data:person, error:err1} = await supabase.from('delivery_people')
-        .insert({name, email, password_hash: hash(pwd)})
-        .select()
-        .single();
-      if(err1){alert('Error adding person: '+err1.message);return;}
+// Call the Edge Function and surface its real error message
+async function manage(body){
+  const { data, error } = await sb.functions.invoke('manage-delivery-partners', { body });
+  if(error){
+    let m = error.message;
+    try { const j = await error.context.json(); if(j.error) m = j.error; } catch(e){}
+    throw new Error(m);
+  }
+  return data;
+}
 
-      // 2️⃣ Generate a token
-      const token = crypto.randomUUID();
-      const {error:err2} = await supabase.from('delivery_tokens')
-        .insert({token, delivery_person_id: person.id});
-      if(err2){alert('Error creating token: '+err2.message);return;}
+async function loadList(){
+  const { data, error } = await sb.from('user_roles').select('user_id,name,email,active')
+    .eq('role','delivery').order('name');
+  const box = $('#list');
+  if(error){ box.textContent = 'Could not load: ' + error.message; return; }
+  if(!data.length){ box.textContent = 'No delivery partners yet.'; return; }
+  box.className = '';
+  box.innerHTML = `<table><thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead><tbody>` +
+    data.map(p => `<tr>
+      <td>${esc(p.name)}</td><td>${esc(p.email)}</td>
+      <td><span class="pill ${p.active?'on':'off'}">${p.active?'Active':'Deactivated'}</span></td>
+      <td class="actions">
+        <button data-reset="${p.user_id}">Reset password</button>
+        <button data-toggle="${p.user_id}" data-active="${p.active}">${p.active?'Deactivate':'Activate'}</button>
+      </td></tr>`).join('') + `</tbody></table>`;
+}
 
-      // 3️⃣ Show the link
-      const link = `${window.location.origin}/delivery.html?token=${token}`;
-      const resDiv = document.getElementById('result');
-      resDiv.innerHTML = `<strong>Generated On-boarding Link:</strong><a href="${link}" target="_blank">${link}</a>`;
-      resDiv.classList.remove('hidden');
-    };
-  </script>
+$('#list').addEventListener('click', async (e) => {
+  const reset = e.target.dataset.reset, toggle = e.target.dataset.toggle;
+  try {
+    if(reset){
+      const pw = prompt('New password for this delivery partner (min 8 characters):');
+      if(!pw) return;
+      await manage({ action:'reset_password', user_id: reset, password: pw });
+      alert('Password updated. Give the new password to the delivery partner.');
+    } else if(toggle){
+      const makeActive = e.target.dataset.active !== 'true';
+      if(!makeActive && !confirm('Deactivate this delivery partner? They will be logged out of access immediately.')) return;
+      await manage({ action:'set_active', user_id: toggle, active: makeActive });
+      loadList();
+    }
+  } catch(err){ alert(err.message); }
+});
+
+$('#createBtn').addEventListener('click', async () => {
+  const name = $('#name').value.trim(), email = $('#email').value.trim(), password = $('#pwd').value;
+  const msg = $('#createMsg'), btn = $('#createBtn');
+  if(!name || !email || !password){ show(msg, 'Name, email and password are all required.', false); return; }
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    await manage({ action:'create', name, email, password });
+    show(msg, `Account created. Give ${email} and the password you set to ${name}; they sign in at ${location.origin}/`, true);
+    $('#name').value = $('#email').value = $('#pwd').value = '';
+    loadList();
+  } catch(err){ show(msg, err.message, false); }
+  btn.disabled = false; btn.textContent = 'Create account';
+});
+
+// Only a signed-in admin may use this page
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if(!session){ location.href = 'index.html'; return; }
+  const { data: me } = await sb.from('user_roles').select('role,active').eq('user_id', session.user.id).maybeSingle();
+  if(!me || me.role !== 'admin' || !me.active){ location.href = 'index.html'; return; }
+  $('#app').hidden = false;
+  loadList();
+})();
+</script>
 </body>
 </html>

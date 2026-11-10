@@ -364,15 +364,28 @@
     <button class="btn ghost sm" id="logoutBtn" style="border-color:#3a4658; color:#c8cfd3;">Log out</button>
   </div>
   <nav class="tabs" id="tabNav">
+      <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
+      <button data-tab="delivery"><span class="n">02</span>Delivery Details</button>
+      <button data-tab="signed"><span class="n">03</span>Signed Bills</button>
+      <button data-tab="agent"><span class="n">04</span>Daily Agent Report</button>
+      <button data-tab="settlement"><span class="n">05</span>Settlement Summary</button>
+      <button data-tab="cash"><span class="n">06</span>Cash Collection by Date</button>
+      <button data-tab="admin"><span class="n">07</span>Admin</button>
+    </nav>
+      <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
+      <button data-tab="delivery"><span class="n">02</span>Delivery Details</button>
+      <button data-tab="signed"><span class="n">03</span>Signed Bills</button>
+      <button data-tab="agent"><span class="n">04</span>Daily Agent Report</button>
+      <button data-tab="settlement"><span class="n">05</span>Settlement Summary</button>
+      <button data-tab="cash"><span class="n">06</span>Cash Collection by Date</button>
+      <button data-tab="admin"><span class="n">07</span>Admin</button>
+    </nav>
     <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
     <button data-tab="delivery"><span class="n">02</span>Delivery Details</button>
     <button data-tab="signed"><span class="n">03</span>Signed Bills</button>
     <button data-tab="agent"><span class="n">04</span>Daily Agent Report</button>
     <button data-tab="settlement"><span class="n">05</span>Settlement Summary</button>
     <button data-tab="cash"><span class="n">06</span>Cash Collection by Date</button>
-    
-    <!-- Updated Admin Link -->
-    <button onclick="window.location.href='admin.html';"><span class="n">07</span>Admin Dashboard</button>
   </nav>
 </header>
 
@@ -543,6 +556,33 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
 
   <!-- ============ TAB 6: CASH COLLECTION BY DATE ============ -->
   <section class="tabview" id="tab-cash">
+    <h2 class="section-title">Cash &amp; Bank/UPI Collected, by Date</h2>
+    <p class="helptext">Combines bills marked Cash or UPI/Bank (by delivery date) with Signed bills' collection visits logged as Collected— Cash or Collected— Bank (by visit date). Signed-but-pending amounts are excluded — this is money actually in hand, split by how it came in.</p>
+    <div class="table-wrap" id="cashTableWrap"></div>
+  </section>
+
+  <!-- ADMIN TAB (new) -->
+  <section class="tabview" id="tab-admin">
+    <h2 class="section-title">Admin – Create Delivery‑Partner User</h2>
+    <div class="panel">
+      <div class="row" style="gap:12px;flex-wrap:wrap;">
+        <div>
+          <label>Name</label>
+          <input type="text" id="adminName" placeholder="John Doe" />
+        </div>
+        <div>
+          <label>Email</label>
+          <input type="email" id="adminEmail" placeholder="john@example.com" />
+        </div>
+        <div>
+          <label>Password</label>
+          <input type="password" id="adminPassword" placeholder="••••••••" />
+        </div>
+      </div>
+      <button class="btn primary" id="adminCreateBtn" style="margin-top:12px;">Create Delivery‑Partner</button>
+      <div id="adminMsg" class="footnote" style="margin-top:8px;"></div>
+    </div>
+  </section>>
     <h2 class="section-title">Cash &amp; Bank/UPI Collected, by Date</h2>
     <p class="helptext">Combines bills marked Cash or UPI/Bank (by delivery date) with Signed bills' collection visits logged as Collected— Cash or Collected— Bank (by visit date). Signed-but-pending amounts are excluded — this is money actually in hand, split by how it came in.</p>
     <div class="table-wrap" id="cashTableWrap"></div>

@@ -1,6 +1,16 @@
 -- Shree Radhe Enterprises Ledger — Supabase schema
 -- Run this once in your Supabase project's SQL Editor (Dashboard → SQL Editor → New query → paste → Run).
 
+-- Users table (Supabase Auth) already exists as auth.users
+-- Profiles table to store role per user
+create table if not exists profiles (
+  id uuid references auth.users not null primary key,
+  name text,  -- delivery‑partner display name
+  role text not null default 'viewer' -- allowed values: admin, editor, delivery_partner, viewer
+  id uuid references auth.users not null primary key,
+  role text not null default 'viewer' -- allowed values: admin, editor, delivery_partner, viewer
+);
+
 create table if not exists bills (
   id                  text primary key,
   company             text,
@@ -35,23 +45,21 @@ create index if not exists visits_bill_id_idx on visits(bill_id);
 create index if not exists bills_delivery_date_idx on bills(delivery_date);
 create index if not exists bills_delivery_status_idx on bills(delivery_status);
 
--- Row Level Security -----------------------------------------------------
--- Supabase enables RLS by default on new tables, which blocks ALL access
--- until you add a policy. This app has no login system — everyone who has
--- the page URL uses the same anon key baked into the HTML. These policies
--- grant that anon key full read/write access, which matches how the app
--- works today. This is NOT the same as public security: anyone who gets
--- your Supabase URL + anon key (visible in the page's source) can read or
--- write this data directly, bypassing the UI entirely. Fine for an
--- internal tool on an unlisted URL; not fine if this needs to resist a
--- determined outsider. If that ever matters, add Supabase Auth and scope
--- these policies to authenticated users instead of anon.
+-- Row Level Security for profiles
+alter table profiles enable row level security;
+
+-- Profiles policies
+create policy "allow read profiles" on profiles for select using (true);
+create policy "allow write profiles" on profiles for all using (auth.role() = 'admin' or auth.role() = 'editor');
 
 alter table bills enable row level security;
 alter table visits enable row level security;
 
-create policy "anon full access to bills" on bills
-  for all using (true) with check (true);
+-- Policies ---------------------------------------------------------------
+-- Everyone (including anon) can read all rows
+create policy "allow read for all" on bills for select using (true);
+create policy "allow read for all" on visits for select using (true);
 
-create policy "anon full access to visits" on visits
-  for all using (true) with check (true);
+-- Only admins or editors can write (insert, update, delete)
+create policy "allow write for admins" on bills for all using (auth.role() = 'admin' or auth.role() = 'editor');
+create policy "allow write for admins" on visits for all using (auth.role() = 'admin' or auth.role() = 'editor');

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Delivery Dashboard – Shree Radha Enterprises</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <style>
+    :root {
+      --ink: #182230;
+      --paper: #f6f4ee;
+      --panel: #fff;
+      --line: #dfdcd3;
+      --radius: 8px;
+      --shadow: 0 1px 2px rgba(24, 34, 48, .05), 0 4px 14px rgba(24, 34, 48, .05);
+    }
+
+    body {
+      font-family: "IBM Plex Sans", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .flex {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      background: var(--ink);
+      color: #fff;
+      text-align: left;
+    }
+
+    select {
+      padding: 4px 6px;
+    }
+
+    #loginError {
+      color: #c00;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Delivery Dashboard</h1>
+  <!-- Sign‑in form -->
+
+  <section id="loginSection" class="card">
+    <h2>Login</h2>
+    <div class="flex">
+      <label>Email:<input type="email" id="email"></label>
+      <label>Password:<input type="password" id="password"></label>
+      <button id="loginBtn">Sign In</button>
+    </div>
+    <p id="loginError" class="hidden"></p>
+  </section>
+
+  <!-- Bill list – hidden until logged in -->
+  <section id="billsSection" class="card hidden">
+    <h2>Pending Bills</h2>
+    <table id="billsTable">
+      <thead>
+        <tr>
+          <th>Bill No</th>
+          <th>Party Name</th>
+          <th>Amount Pending</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <script>
+    // ----- Supabase init (replace with your own values) -----
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ----- Helper: hash password (client‑side) -----
+    function hashPassword(pwd) { return CryptoJS.SHA256(pwd).toString(CryptoJS.enc.Hex); }
+
+    const loginBtn = document.getElementById('loginBtn');
+    const loginError = document.getElementById('loginError');
+    const loginSection = document.getElementById('loginSection');
+    const billsSection = document.getElementById('billsSection');
+    const billsTableBody = document.querySelector('#billsTable tbody');
+
+    loginBtn.addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      const pwd = document.getElementById('password').value;
+      if (!email || !pwd) return showError('Provide email & password');
+      const hashed = hashPassword(pwd);
+      const { data, error } = await supabase.from('delivery_people')
+        .select('id, name')
+        .eq('email', email)
+        .eq('password_hash', hashed)
+        .single();
+      if (error || !data) return showError('Invalid credentials');
+      localStorage.setItem('deliveryPersonId', data.id);
+      loginSection.classList.add('hidden');
+      loadBills();
+    });
+
+    function showError(msg) { loginError.textContent = msg; loginError.classList.remove('hidden'); }
+
+    async function loadBills() {
+      const { data, error } = await supabase.from('bills')
+        .select('id, bill_no, party_name, amount_pending, delivery_status')
+        .eq('delivery_status', 'Pending')
+        .order('bill_no');
+      if (error) return console.error('loadBills error', error);
+      renderBills(data);
+      billsSection.classList.remove('hidden');
+      // Real‑time updates
+      supabase.channel('public:bills')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bills' }, payload => {
+          const changed = payload.new;
+          const row = billsTableBody.querySelector(`tr[data-id='${changed.id}']`);
+          if (row) row.querySelector('.statusSelect').value = changed.delivery_status;
+        })
+        .subscribe();
+    }
+
+    function renderBills(bills) {
+      billsTableBody.innerHTML = '';
+      bills.forEach(b => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = b.id;
+        tr.innerHTML = `
+          <td>${b.bill_no}</td>
+          <td>${b.party_name}</td>
+          <td>${b.amount_pending}</td>
+          <td><select class="statusSelect">
+            <option value="Pending" ${b.delivery_status === 'Pending' ? 'selected' : ''}>Pending</option>
+            <option value="Delivered" ${b.delivery_status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+            <option value="Failed" ${b.delivery_status === 'Failed' ? 'selected' : ''}>Failed</option>
+          </select></td>`;
+        const sel = tr.querySelector('.statusSelect');
+        sel.addEventListener('change', async () => {
+          const newStatus = sel.value;
+          const { error } = await supabase.from('bills')
+            .update({ delivery_status: newStatus })
+            .eq('id', b.id);
+          if (error) console.error('Update error', error);
+        });
+        billsTableBody.appendChild(tr);
+      });
+    }
+
+    // ----- Optional token auto‑login -----
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+      (async () => {
+        const { data, error } = await supabase.from('delivery_tokens')
+          .select('delivery_person_id')
+          .eq('token', token)
+          .single();
+        if (!error && data) {
+          localStorage.setItem('deliveryPersonId', data.delivery_person_id);
+          loginSection.classList.add('hidden');
+          loadBills();
+        }
+      })();
+    }
+  </script>
+</body>
+
+</html>

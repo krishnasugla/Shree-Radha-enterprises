@@ -715,10 +715,9 @@ async function loadData(){
     toast('Could not load from the database — check the browser console and your Supabase config.');
   }
   renderAll();
-if (!window.adminBillsChannel && sb) {
+  if (!window.adminBillsChannel && sb) {
     window.adminBillsChannel = sb
       .channel('admin:bills-live')
-      // 1. Listen for changes to the main bills table
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const newBill = rowToBill(payload.new);
@@ -739,7 +738,6 @@ if (!window.adminBillsChannel && sb) {
           renderAll();
         }
       })
-      // 2. Listen for follow-up visits added/updated by Mukesh
       .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, (payload) => {
         const row = payload.new?.bill_id ? payload.new : payload.old;
         const bill = bills.find(b => b.id === row?.bill_id);
@@ -762,7 +760,6 @@ if (!window.adminBillsChannel && sb) {
       .subscribe();
   }
 }
-
 
 
 /* Per-row, debounced (400ms) so rapid typing doesn't fire a request per keystroke.

@@ -715,11 +715,18 @@ async function loadData(){
     toast('Could not load from the database — check the browser console and your Supabase config.');
   }
   renderAll();
-  if (!window.adminBillsChannel && sb) {
+if (!window.adminBillsChannel && sb) {
     window.adminBillsChannel = sb
       .channel('admin:bills-live')
+      // 1. Listen for changes to the main bills table
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
-        if (payload.eventType === 'UPDATE') {
+        if (payload.eventType === 'INSERT') {
+          const newBill = rowToBill(payload.new);
+          if (!bills.some(b => b.id === newBill.id)) {
+            bills.unshift(newBill);
+            renderAll();
+          }
+        } else if (payload.eventType === 'UPDATE') {
           const updatedBill = rowToBill(payload.new);
           const idx = bills.findIndex(b => b.id === updatedBill.id);
           if (idx !== -1) {
@@ -727,9 +734,30 @@ async function loadData(){
             bills[idx] = updatedBill;
             renderAll();
           }
-        } else {
-          loadData();
+        } else if (payload.eventType === 'DELETE') {
+          bills = bills.filter(b => b.id !== payload.old.id);
+          renderAll();
         }
+      })
+      // 2. Listen for follow-up visits added/updated by Mukesh
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, (payload) => {
+        const row = payload.new?.bill_id ? payload.new : payload.old;
+        const bill = bills.find(b => b.id === row?.bill_id);
+        if (!bill) return;
+
+        if (payload.eventType === 'INSERT') {
+          const newVisit = rowToVisit(payload.new);
+          if (!bill.visits.some(v => v.id === newVisit.id)) {
+            bill.visits.push(newVisit);
+          }
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedVisit = rowToVisit(payload.new);
+          const vIdx = bill.visits.findIndex(v => v.id === updatedVisit.id);
+          if (vIdx !== -1) bill.visits[vIdx] = updatedVisit;
+        } else if (payload.eventType === 'DELETE') {
+          bill.visits = bill.visits.filter(v => v.id !== payload.old.id);
+        }
+        renderAll();
       })
       .subscribe();
   }

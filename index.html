@@ -692,8 +692,8 @@ async function loadData(){
   }
   try{
     const [billsRes, visitsRes] = await Promise.all([
-      sb.from('bills').select('*'),
-      sb.from('visits').select('*')
+      sb.from('bills').select('*').order('created_at', { ascending: false }).range(0, 4999),
+      sb.from('visits').select('*').range(0, 9999)
     ]);
     if(billsRes.error) throw billsRes.error;
     if(visitsRes.error) throw visitsRes.error;
@@ -715,6 +715,25 @@ async function loadData(){
     toast('Could not load from the database — check the browser console and your Supabase config.');
   }
   renderAll();
+    if (!window.adminBillsChannel && sb) {
+    window.adminBillsChannel = sb
+      .channel('admin:bills-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
+        if (payload.eventType === 'UPDATE') {
+          const updatedBill = rowToBill(payload.new);
+          const idx = bills.findIndex(b => b.id === updatedBill.id);
+          if (idx !== -1) {
+            updatedBill.visits = bills[idx].visits || [];
+            bills[idx] = updatedBill;
+            renderAll();
+          }
+        } else {
+          loadData();
+        }
+      })
+      .subscribe();
+  }
+}
 }
 
 /* Per-row, debounced (400ms) so rapid typing doesn't fire a request per keystroke.

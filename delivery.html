@@ -120,12 +120,14 @@
       const pwd = document.getElementById('password').value;
       if (!email || !pwd) return showError('Provide email & password');
       const hashed = hashPassword(pwd);
+      // fetching the user information from the db
       const { data, error } = await supabase.from('delivery_people')
         .select('id, name')
         .eq('email', email)
         .eq('password_hash', hashed)
         .single();
       if (error || !data) return showError('Invalid credentials');
+      // item set to their local storage
       localStorage.setItem('deliveryPersonId', data.id);
       loginSection.classList.add('hidden');
       loadBills();

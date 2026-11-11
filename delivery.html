@@ -101,101 +101,173 @@
   </section>
 
   <script>
-    // ----- Supabase init (replace with your own values) -----
-    const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // ----- 1. Supabase Initialization -----
+  const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs';
+  const PARTNER_LOGIN_DOMAIN = 'delivery.invalid'; // Must match LOGIN_DOMAIN in Edge Function
 
-    // ----- Helper: hash password (client‑side) -----
-    function hashPassword(pwd) { return CryptoJS.SHA256(pwd).toString(CryptoJS.enc.Hex); }
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const loginBtn = document.getElementById('loginBtn');
-    const loginError = document.getElementById('loginError');
-    const loginSection = document.getElementById('loginSection');
-    const billsSection = document.getElementById('billsSection');
-    const billsTableBody = document.querySelector('#billsTable tbody');
+  // ----- 2. DOM Elements -----
+  const loginBtn = document.getElementById('loginBtn');
+  const loginError = document.getElementById('loginError');
+  const loginSection = document.getElementById('loginSection');
+  const billsSection = document.getElementById('billsSection');
+  const billsTableBody = document.querySelector('#billsTable tbody');
 
-    loginBtn.addEventListener('click', async () => {
-      const email = document.getElementById('email').value.trim();
-      const pwd = document.getElementById('password').value;
-      if (!email || !pwd) return showError('Provide email & password');
-      const hashed = hashPassword(pwd);
-      // fetching the user information from the db
-      const { data, error } = await supabase.from('delivery_people')
-        .select('id, name')
-        .eq('email', email)
-        .eq('password_hash', hashed)
-        .single();
-      if (error || !data) return showError('Invalid credentials');
-      // item set to their local storage
-      localStorage.setItem('deliveryPersonId', data.id);
-      loginSection.classList.add('hidden');
-      loadBills();
+  let billsChannel = null; // Prevents duplicate realtime listeners
+
+  function showError(msg) {
+    loginError.textContent = msg;
+    loginError.classList.remove('hidden');
+  }
+
+  // ----- 3. Login Handler -----
+  loginBtn.addEventListener('click', async () => {
+    const rawInput = document.getElementById('email').value.trim().toLowerCase();
+    const pwd = document.getElementById('password').value;
+
+    if (!rawInput || !pwd) {
+      return showError('Provide Login ID & password');
+    }
+
+    // Automatically append @delivery.invalid if user enters just their Login ID (e.g. mukesh4821)
+    const loginEmail = rawInput.includes('@')
+      ? rawInput
+      : `${rawInput}@${PARTNER_LOGIN_DOMAIN}`;
+
+    // Step A: Verify password via Supabase Auth
+    const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
+      email: loginEmail,
+      password: pwd
     });
 
-    function showError(msg) { loginError.textContent = msg; loginError.classList.remove('hidden'); }
+    if (authError || !authData.user) {
+      return showError('Invalid Login ID or password');
+    }
 
-    async function loadBills() {
-      const { data, error } = await supabase.from('bills')
-        .select('id, bill_no, party_name, amount_pending, delivery_status')
-        .eq('delivery_status', 'Pending')
-        .order('bill_no');
-      if (error) return console.error('loadBills error', error);
-      renderBills(data);
-      billsSection.classList.remove('hidden');
-      // Real‑time updates
-      supabase.channel('public:bills')
+    // Step B: Verify active profile in user_roles
+    const success = await loadUserProfileAndBills(authData.user.id);
+    if (!success) {
+      await supabaseClient.auth.signOut();
+    }
+  });
+
+  // ----- 4. Fetch Role & Load Assigned Bills -----
+  async function loadUserProfileAndBills(userId) {
+    const { data: profile, error: roleError } = await supabaseClient
+      .from('user_roles')
+      .select('user_id, name, role, active')
+      .eq('user_id', userId)
+      .single();
+
+    if (roleError || !profile) {
+      showError('User profile not found');
+      return false;
+    }
+
+    if (!profile.active) {
+      showError('Account deactivated. Contact admin.');
+      return false;
+    }
+
+    localStorage.setItem('deliveryPersonId', profile.user_id);
+    localStorage.setItem('deliveryPersonName', profile.name);
+    localStorage.setItem('userRole', profile.role);
+
+    loginError.classList.add('hidden');
+    loginSection.classList.add('hidden');
+    await loadBills(profile);
+    return true;
+  }
+
+  // ----- 5. Fetch Pending Bills & Subscribe to Realtime Updates -----
+  async function loadBills(profile) {
+    let query = supabaseClient
+      .from('bills')
+      .select('id, bill_no, retailer, total_amount, delivery_status, delivery_partner')
+      .eq('delivery_status', 'Pending')
+      .order('bill_no');
+
+    // If logged in as a delivery partner, only show bills assigned to their name
+    if (profile.role === 'delivery') {
+      query = query.eq('delivery_partner', profile.name);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('loadBills error:', error);
+      return showError('Failed to load bills: ' + error.message);
+    }
+
+    renderBills(data);
+    billsSection.classList.remove('hidden');
+
+    // Subscribe once to real-time bill status updates
+    if (!billsChannel) {
+      billsChannel = supabaseClient
+        .channel('public:bills')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bills' }, payload => {
           const changed = payload.new;
           const row = billsTableBody.querySelector(`tr[data-id='${changed.id}']`);
-          if (row) row.querySelector('.statusSelect').value = changed.delivery_status;
+          if (row) {
+            row.querySelector('.statusSelect').value = changed.delivery_status;
+          }
         })
         .subscribe();
     }
+  }
 
-    function renderBills(bills) {
-      billsTableBody.innerHTML = '';
-      bills.forEach(b => {
-        const tr = document.createElement('tr');
-        tr.dataset.id = b.id;
-        tr.innerHTML = `
-          <td>${b.bill_no}</td>
-          <td>${b.party_name}</td>
-          <td>${b.amount_pending}</td>
-          <td><select class="statusSelect">
+  // ----- 6. Render Table Rows & Attach Status Change Listeners -----
+  function renderBills(bills) {
+    billsTableBody.innerHTML = '';
+
+    if (!bills || bills.length === 0) {
+      billsTableBody.innerHTML = `<tr><td colspan="4">No pending bills assigned.</td></tr>`;
+      return;
+    }
+
+    bills.forEach(b => {
+      const tr = document.createElement('tr');
+      tr.dataset.id = b.id;
+      tr.innerHTML = `
+        <td>${b.bill_no ?? '-'}</td>
+        <td>${b.retailer ?? '-'}</td>
+        <td>₹${b.total_amount ?? 0}</td>
+        <td>
+          <select class="statusSelect">
             <option value="Pending" ${b.delivery_status === 'Pending' ? 'selected' : ''}>Pending</option>
             <option value="Delivered" ${b.delivery_status === 'Delivered' ? 'selected' : ''}>Delivered</option>
             <option value="Failed" ${b.delivery_status === 'Failed' ? 'selected' : ''}>Failed</option>
-          </select></td>`;
-        const sel = tr.querySelector('.statusSelect');
-        sel.addEventListener('change', async () => {
-          const newStatus = sel.value;
-          const { error } = await supabase.from('bills')
-            .update({ delivery_status: newStatus })
-            .eq('id', b.id);
-          if (error) console.error('Update error', error);
-        });
-        billsTableBody.appendChild(tr);
-      });
-    }
+          </select>
+        </td>`;
 
-    // ----- Optional token auto‑login -----
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    if (token) {
-      (async () => {
-        const { data, error } = await supabase.from('delivery_tokens')
-          .select('delivery_person_id')
-          .eq('token', token)
-          .single();
-        if (!error && data) {
-          localStorage.setItem('deliveryPersonId', data.delivery_person_id);
-          loginSection.classList.add('hidden');
-          loadBills();
+      const sel = tr.querySelector('.statusSelect');
+      sel.addEventListener('change', async () => {
+        const newStatus = sel.value;
+        const { error } = await supabaseClient
+          .from('bills')
+          .update({ delivery_status: newStatus })
+          .eq('id', b.id);
+
+        if (error) {
+          console.error('Update error:', error);
+          alert('Could not update status: ' + error.message);
         }
-      })();
+      });
+
+      billsTableBody.appendChild(tr);
+    });
+  }
+
+  // ----- 7. Auto-Restore Session on Page Refresh -----
+  (async () => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session?.user) {
+      await loadUserProfileAndBills(session.user.id);
     }
-  </script>
+  })();
+</script>
 </body>
 
 </html>

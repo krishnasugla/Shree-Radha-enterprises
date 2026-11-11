@@ -100,13 +100,16 @@
     </table>
   </section>
 
-  <script>
+<script>
   // ----- 1. Supabase Initialization -----
-  const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co';
+  const SUPABASE_URL = 'https://supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs';
-  const PARTNER_LOGIN_DOMAIN = 'delivery.invalid'; // Must match LOGIN_DOMAIN in Edge Function
+  const PARTNER_LOGIN_DOMAIN = 'delivery.invalid'; // Must match Edge Function LOGIN_DOMAIN
 
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Exact same status values as your Admin dashboard
+  const STATUS_OPTIONS = ["", "Signed", "Cash", "UPI/Bank", "Cheque", "Cancelled", "Part Delivered"];
 
   // ----- 2. DOM Elements -----
   const loginBtn = document.getElementById('loginBtn');
@@ -115,7 +118,7 @@
   const billsSection = document.getElementById('billsSection');
   const billsTableBody = document.querySelector('#billsTable tbody');
 
-  let billsChannel = null; // Prevents duplicate realtime listeners
+  let billsChannel = null;
 
   function showError(msg) {
     loginError.textContent = msg;
@@ -131,12 +134,11 @@
       return showError('Provide Login ID & password');
     }
 
-    // Automatically append @delivery.invalid if user enters just their Login ID (e.g. mukesh4821)
+    // Appends @delivery.invalid automatically when partner enters e.g. "mukesh4821"
     const loginEmail = rawInput.includes('@')
       ? rawInput
       : `${rawInput}@${PARTNER_LOGIN_DOMAIN}`;
 
-    // Step A: Verify password via Supabase Auth
     const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
       email: loginEmail,
       password: pwd
@@ -146,14 +148,13 @@
       return showError('Invalid Login ID or password');
     }
 
-    // Step B: Verify active profile in user_roles
     const success = await loadUserProfileAndBills(authData.user.id);
     if (!success) {
       await supabaseClient.auth.signOut();
     }
   });
 
-  // ----- 4. Fetch Role & Load Assigned Bills -----
+  // ----- 4. Verify Profile in user_roles & Load Bills -----
   async function loadUserProfileAndBills(userId) {
     const { data: profile, error: roleError } = await supabaseClient
       .from('user_roles')
@@ -167,7 +168,7 @@
     }
 
     if (!profile.active) {
-      showError('Account deactivated. Contact admin.');
+      showError('Your account has been deactivated. Contact admin.');
       return false;
     }
 
@@ -181,17 +182,21 @@
     return true;
   }
 
-  // ----- 5. Fetch Pending Bills & Subscribe to Realtime Updates -----
+  // ----- 5. Fetch Only Open Bills Assigned to This Partner -----
   async function loadBills(profile) {
     let query = supabaseClient
       .from('bills')
-      .select('id, bill_no, retailer, total_amount, delivery_status, delivery_partner')
-      .eq('delivery_status', 'Pending')
-      .order('bill_no');
+      .select('id, bill_no, retailer, total_amount, delivery_date, delivery_status, delivery_partner')
+      .is('delivery_status', null) // Shows only open bills not yet marked Signed/Cash/UPI/etc.
+      .order('delivery_date', { ascending: false });
 
-    // If logged in as a delivery partner, only show bills assigned to their name
+    // Filter strictly to bills assigned to the logged-in delivery partner
     if (profile.role === 'delivery') {
-      query = query.eq('delivery_partner', profile.name);
+      const cleanName = (profile.name || '').trim();
+      if (!cleanName) {
+        return showError('Profile name missing. Contact admin.');
+      }
+      query = query.ilike('delivery_partner', `%${cleanName}%`);
     }
 
     const { data, error } = await query;
@@ -203,56 +208,63 @@
     renderBills(data);
     billsSection.classList.remove('hidden');
 
-    // Subscribe once to real-time bill status updates
+    // Subscribe once to real-time updates from Admin or database
     if (!billsChannel) {
       billsChannel = supabaseClient
         .channel('public:bills')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bills' }, payload => {
-          const changed = payload.new;
-          const row = billsTableBody.querySelector(`tr[data-id='${changed.id}']`);
-          if (row) {
-            row.querySelector('.statusSelect').value = changed.delivery_status;
-          }
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, () => {
+          // Reload list whenever Admin assigns a new bill or updates a status
+          loadBills(profile);
         })
         .subscribe();
     }
   }
 
-  // ----- 6. Render Table Rows & Attach Status Change Listeners -----
+  // ----- 6. Render Table Rows & Save Status Changes -----
   function renderBills(bills) {
     billsTableBody.innerHTML = '';
 
     if (!bills || bills.length === 0) {
-      billsTableBody.innerHTML = `<tr><td colspan="4">No pending bills assigned.</td></tr>`;
+      billsTableBody.innerHTML = `<tr><td colspan="4">No pending bills assigned to you.</td></tr>`;
       return;
     }
 
     bills.forEach(b => {
       const tr = document.createElement('tr');
       tr.dataset.id = b.id;
+      const currentStatus = b.delivery_status || '';
+
+      const optionsHtml = STATUS_OPTIONS.map(opt => `
+        <option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>
+          ${opt === '' ? '-- Select Status --' : opt}
+        </option>
+      `).join('');
+
       tr.innerHTML = `
         <td>${b.bill_no ?? '-'}</td>
         <td>${b.retailer ?? '-'}</td>
-        <td>₹${b.total_amount ?? 0}</td>
-        <td>
-          <select class="statusSelect">
-            <option value="Pending" ${b.delivery_status === 'Pending' ? 'selected' : ''}>Pending</option>
-            <option value="Delivered" ${b.delivery_status === 'Delivered' ? 'selected' : ''}>Delivered</option>
-            <option value="Failed" ${b.delivery_status === 'Failed' ? 'selected' : ''}>Failed</option>
-          </select>
-        </td>`;
+        <td>₹${Number(b.total_amount || 0).toLocaleString('en-IN')}</td>
+        <td><select class="statusSelect">${optionsHtml}</select></td>
+      `;
 
       const sel = tr.querySelector('.statusSelect');
       sel.addEventListener('change', async () => {
-        const newStatus = sel.value;
-        const { error } = await supabaseClient
+        const newStatus = sel.value === '' ? null : sel.value;
+        sel.disabled = true;
+
+        const { data: updated, error } = await supabaseClient
           .from('bills')
           .update({ delivery_status: newStatus })
-          .eq('id', b.id);
+          .eq('id', b.id)
+          .select('id'); // Confirms a row was actually updated (catches silent RLS blocks)
+
+        sel.disabled = false;
 
         if (error) {
           console.error('Update error:', error);
-          alert('Could not update status: ' + error.message);
+          alert('Failed to save status: ' + error.message);
+        } else if (!updated || updated.length === 0) {
+          alert('Permission denied by database (RLS). Ask admin to enable delivery update access.');
         }
       });
 

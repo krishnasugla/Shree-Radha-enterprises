@@ -715,7 +715,7 @@ async function loadData(){
     toast('Could not load from the database — check the browser console and your Supabase config.');
   }
   renderAll();
-    if (!window.adminBillsChannel && sb) {
+  if (!window.adminBillsChannel && sb) {
     window.adminBillsChannel = sb
       .channel('admin:bills-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
@@ -734,7 +734,7 @@ async function loadData(){
       .subscribe();
   }
 }
-}
+
 
 /* Per-row, debounced (400ms) so rapid typing doesn't fire a request per keystroke.
    Debounce is keyed per bill/visit id, so editing two different rows never blocks

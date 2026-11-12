@@ -569,6 +569,9 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
 
 let bills = [];
 let userRole = null, partnerName = '', enteredFor = null;   // set after login from the user_roles table
+const isStaff = () => userRole === 'delivery' || userRole === 'sales';   // delivery partners and sales persons
+const sameName = (a, b) => (a||'').trim().toLowerCase() === (b||'').trim().toLowerCase();   // capitals/spaces ignored, like the database
+const hasMyVisit = b => (b.visits||[]).some(v => sameName(v.assignedTo, partnerName));
 let deliveryRowOrder = [];
 let fillDrag = null;
 let expandedSignedIds = new Set();
@@ -662,7 +665,10 @@ function rowToBill(r){
     totalAmount: r.total_amount==null?0:Number(r.total_amount), deliveryDate: r.delivery_date||'', area: r.area||'',
     salesPerson: r.sales_person||'', deliveryPartner: r.delivery_partner||'', deliveryStatus: r.delivery_status||'',
     amountAtDelivery: r.amount_at_delivery==null?'':Number(r.amount_at_delivery), comments: r.comments||'',
-    discount: r.discount==null?'':Number(r.discount), nextVisitPlanned: r.next_visit_planned||'', verified: !!r.verified, visits: []
+    discount: r.discount==null?'':Number(r.discount), nextVisitPlanned: r.next_visit_planned||'', verified: !!r.verified, visits: [],
+    _snap: { delivery_date: r.delivery_date ?? null, delivery_status: r.delivery_status ?? null,
+             amount_at_delivery: r.amount_at_delivery == null ? null : Number(r.amount_at_delivery),
+             comments: r.comments ?? null, next_visit_planned: r.next_visit_planned ?? null }
   };
 }
 function visitToRow(v, billId){
@@ -675,13 +681,43 @@ function rowToVisit(r){
   return { id: r.id, date: r.date||'', assignedTo: r.assigned_to||'', status: r.status||'', amount: r.amount==null?0:Number(r.amount), notes: r.notes||'' };
 }
 
-/* Admin: keep the Delivery Partner dropdown in sync with real partner accounts */
+/* Admin: keep the dropdowns in sync with real staff accounts. Anyone with a login can be a
+   delivery partner or be assigned a collection visit; sales persons also join the Sales Person list. */
 async function loadPartnerNames(){
-  const { data } = await sb.from('user_roles').select('name').eq('role','delivery').eq('active',true);
-  (data||[]).forEach(r => { if(r.name && !DELIVERY_PARTNER_OPTIONS.includes(r.name)) DELIVERY_PARTNER_OPTIONS.push(r.name); });
+  const { data } = await sb.from('user_roles').select('name,role').in('role', ['delivery','sales']).eq('active', true);
+  const addTo = (arr, n) => { if(n && !arr.some(x => sameName(x, n))) arr.push(n); };
+  (data||[]).forEach(r => {
+    addTo(DELIVERY_PARTNER_OPTIONS, r.name);
+    addTo(ASSIGNED_FOR_OPTIONS, r.name);
+    if(r.role === 'sales') addTo(SALES_PERSON_OPTIONS, r.name);
+  });
+}
+/* Who can be picked as a bill's Delivery Partner: delivery partners AND sales persons (they deliver sometimes) */
+function deliveryPickOptions(){
+  const out = [];
+  [...DELIVERY_PARTNER_OPTIONS, ...SALES_PERSON_OPTIONS].forEach(n => { if(!out.some(x => sameName(x, n))) out.push(n); });
+  return out;
 }
 
+/* Supabase returns at most 1000 rows per request. Read page by page until a page comes back
+   empty, otherwise everything beyond the first 1000 bills silently never shows up. */
+async function fetchAll(table){
+  const PAGE = 1000, out = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await sb.from(table).select('*').order('id', { ascending: true }).range(from, from + PAGE - 1);
+    if(error) return { data: null, error };
+    if(!data.length) return { data: out, error: null };
+    out.push(...data);
+    from += data.length;
+  }
+}
+
+let loadSeq = 0;
 async function loadData(){
+  const mySeq = ++loadSeq;
+  // let any edit that is still waiting to be saved reach the database first
+  for(let i = 0; i < 20 && Object.keys(savePending).length; i++) await new Promise(r => setTimeout(r, 100));
   setSaveStatus('loading', 'Loading…');
   if(!sb){
     bills = [];
@@ -691,10 +727,8 @@ async function loadData(){
     return;
   }
   try{
-    const [billsRes, visitsRes] = await Promise.all([
-      sb.from('bills').select('*').order('created_at', { ascending: false }).range(0, 4999),
-      sb.from('visits').select('*').range(0, 9999)
-    ]);
+    const [billsRes, visitsRes] = await Promise.all([ fetchAll('bills'), fetchAll('visits') ]);
+    if(mySeq !== loadSeq) return;   // a newer load has started; let that one win
     if(billsRes.error) throw billsRes.error;
     if(visitsRes.error) throw visitsRes.error;
     if(userRole === 'admin') await loadPartnerNames();
@@ -714,67 +748,103 @@ async function loadData(){
     setSaveStatus('idle', 'Could not load — check Supabase connection');
     toast('Could not load from the database — check the browser console and your Supabase config.');
   }
+  lastLoadAt = Date.now();
   renderAll();
-  if (!window.adminBillsChannel && sb) {
-    window.adminBillsChannel = sb
-      .channel('admin:bills-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          const newBill = rowToBill(payload.new);
-          if (!bills.some(b => b.id === newBill.id)) {
-            bills.unshift(newBill);
-            renderAll();
-          }
-        } else if (payload.eventType === 'UPDATE') {
-          const updatedBill = rowToBill(payload.new);
-          const idx = bills.findIndex(b => b.id === updatedBill.id);
-          if (idx !== -1) {
-            updatedBill.visits = bills[idx].visits || [];
-            bills[idx] = updatedBill;
-            renderAll();
-          }
-        } else if (payload.eventType === 'DELETE') {
-          bills = bills.filter(b => b.id !== payload.old.id);
-          renderAll();
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, (payload) => {
-        const row = payload.new?.bill_id ? payload.new : payload.old;
-        const bill = bills.find(b => b.id === row?.bill_id);
-        if (!bill) return;
-
-        if (payload.eventType === 'INSERT') {
-          const newVisit = rowToVisit(payload.new);
-          if (!bill.visits.some(v => v.id === newVisit.id)) {
-            bill.visits.push(newVisit);
-          }
-        } else if (payload.eventType === 'UPDATE') {
-          const updatedVisit = rowToVisit(payload.new);
-          const vIdx = bill.visits.findIndex(v => v.id === updatedVisit.id);
-          if (vIdx !== -1) bill.visits[vIdx] = updatedVisit;
-        } else if (payload.eventType === 'DELETE') {
-          bill.visits = bill.visits.filter(v => v.id !== payload.old.id);
-        }
-        renderAll();
-      })
-      .subscribe();
-  }
+  startRealtime();
 }
 
+/* ---- live updates (Supabase Realtime) ----
+   Changes made by other people (a partner finishing a delivery, the office assigning a bill) arrive as
+   small events and are merged in place. Rules that keep typing safe:
+   - never redraw while someone is typing in a field (redraw as soon as they leave it)
+   - ignore the echo of your own saves and events identical to what is already on screen
+   - never overwrite a row that has an unsaved local edit */
+let liveChannel = null, needsRender = false, reloadTimer = null, lastLoadAt = 0;
+function isEditing(){
+  const el = document.activeElement;
+  return !!el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) && !!el.closest('.tabview');
+}
+function liveRender(){ if(isEditing()){ needsRender = true; return; } renderAll(); }
+document.addEventListener('focusout', () => {
+  if(!needsRender) return;
+  setTimeout(() => { if(isEditing()) return; needsRender = false; renderAll(); }, 60);
+});
+function scheduleReload(delay){
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => { if(isEditing()){ scheduleReload(1500); return; } loadData(); }, delay || 1200);
+}
+/* Opening a tab reloads only if the data is a little old (saves the free plan's bandwidth) */
+function refreshIfStale(){
+  if(!sb || !enteredFor) return;
+  if(Date.now() - lastLoadAt > (isStaff() ? 120000 : 30000)) loadData();
+}
+document.addEventListener('visibilitychange', () => { if(!document.hidden) refreshIfStale(); });
+const sameBillData = (a, b) => JSON.stringify(billToRow(a)) === JSON.stringify(billToRow(b)) && a.verified === b.verified;
+
+function startRealtime(){
+  if(liveChannel || !sb || !sb.channel) return;
+  liveChannel = sb.channel('live:ledger')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
+      if(payload.eventType === 'DELETE'){
+        if(bills.some(b => b.id === payload.old.id)){ bills = bills.filter(b => b.id !== payload.old.id); liveRender(); }
+        return;
+      }
+      const incoming = rowToBill(payload.new);
+      const idx = bills.findIndex(b => b.id === incoming.id);
+      if(idx === -1){ scheduleReload(800); return; }     // a bill that just became visible to me (e.g. newly assigned)
+      if(savePending['b_' + incoming.id]) return;         // my unsaved edit wins
+      incoming.visits = bills[idx].visits || [];
+      if(sameBillData(bills[idx], incoming)) return;      // my own echo, nothing new
+      bills[idx] = incoming;
+      liveRender();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, (payload) => {
+      if(payload.eventType === 'DELETE'){
+        const owner = bills.find(b => (b.visits||[]).some(v => v.id === payload.old.id));
+        if(owner){ owner.visits = owner.visits.filter(v => v.id !== payload.old.id); liveRender(); }
+        return;
+      }
+      const v = rowToVisit(payload.new);
+      const bill = bills.find(b => b.id === payload.new.bill_id);
+      if(!bill){ scheduleReload(800); return; }           // visit on a bill I do not have yet (e.g. newly assigned to me)
+      if(savePending['v_' + v.id]) return;
+      bill.visits = bill.visits || [];
+      const i = bill.visits.findIndex(x => x.id === v.id);
+      if(i === -1) bill.visits.push(v);
+      else if(JSON.stringify(visitToRow(bill.visits[i], bill.id)) === JSON.stringify(visitToRow(v, bill.id))) return;
+      else bill.visits[i] = v;
+      liveRender();
+    })
+    .subscribe();
+}
 
 /* Per-row, debounced (400ms) so rapid typing doesn't fire a request per keystroke.
    Debounce is keyed per bill/visit id, so editing two different rows never blocks
    or overwrites each other's saves. */
 const saveTimers = {};
+const savePending = {};   // edits typed but not yet written to the database
+const STAFF_COLS = ['delivery_date','delivery_status','amount_at_delivery','comments','next_visit_planned'];
+const normv = v => (v === '' || v === undefined) ? null : v;
 function scheduleSaveBill(bill){
   if(!sb) return;
   setSaveStatus('saving', 'Saving…');
   clearTimeout(saveTimers['b_'+bill.id]);
+  savePending['b_'+bill.id] = true;
   saveTimers['b_'+bill.id] = setTimeout(async () => {
     const row = billToRow(bill);
-    const { error } = (userRole === 'delivery')
-      ? await sb.from('bills').update({ delivery_date: row.delivery_date, delivery_status: row.delivery_status, amount_at_delivery: row.amount_at_delivery, comments: row.comments }).eq('id', bill.id)
-      : await sb.from('bills').upsert(row);
+    let error = null;
+    if(isStaff()){
+      // delivery partners / sales persons: send only the columns they actually changed
+      const snap = bill._snap || (bill._snap = {});
+      const patch = {};
+      STAFF_COLS.forEach(k => { if(normv(row[k]) !== normv(snap[k])) patch[k] = row[k]; });
+      if(Object.keys(patch).length){
+        ({ error } = await sb.from('bills').update(patch).eq('id', bill.id));
+        if(!error) Object.keys(patch).forEach(k => { snap[k] = patch[k]; });
+      }
+    } else {
+      ({ error } = await sb.from('bills').upsert(row));
+    }
     if(error){
       console.error(error);
       if(/verified/i.test(error.message||'')){
@@ -783,16 +853,19 @@ function scheduleSaveBill(bill){
       } else { toast('Save failed — check your connection.'); setSaveStatus('idle', 'Save failed'); }
     }
     else setSaveStatus('idle', 'Saved');
+    delete savePending['b_'+bill.id];
   }, 400);
 }
 function scheduleSaveVisit(visit, billId){
   if(!sb) return;
   setSaveStatus('saving', 'Saving…');
   clearTimeout(saveTimers['v_'+visit.id]);
+  savePending['v_'+visit.id] = true;
   saveTimers['v_'+visit.id] = setTimeout(async () => {
     const { error } = await sb.from('visits').upsert(visitToRow(visit, billId));
     if(error){ console.error(error); toast('Save failed — check your connection.'); setSaveStatus('idle', 'Save failed'); }
     else setSaveStatus('idle', 'Saved');
+    delete savePending['v_'+visit.id];
   }, 400);
 }
 async function insertBillsRemote(newBills){
@@ -1172,7 +1245,7 @@ $$('#tabNav button').forEach(btn => {
     $$('.tabview').forEach(v => v.classList.remove('active'));
     $('#tab-' + btn.dataset.tab).classList.add('active');
     renderAll();
-    if(btn.dataset.tab === 'agent' && sb && userRole === 'admin') loadData();   // pick up what partners have just done
+    if(btn.dataset.tab !== 'import') refreshIfStale();   // pick up what others have just done
   });
 });
 
@@ -1269,16 +1342,59 @@ document.addEventListener('mouseup', () => {
 /* ============================================================
    RENDER: Delivery Details
    ============================================================ */
+let adFilterDate = '', adFilterPartner = '';   // '' = all; '__none__' = unassigned
+function ensureAdminFilterBar(){
+  if($('#adFilterBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'adFilterBar'; bar.className = 'panel'; bar.style.cssText = 'padding:12px 16px; margin-bottom:12px;';
+  bar.innerHTML = `<div class="row">
+      <div><label>Delivery date</label><input type="date" id="adDateFilter"></div>
+      <div><label>Delivery partner</label><select id="adPartnerFilter" style="min-width:160px;"></select></div>
+      <button class="btn ghost sm" id="adToday" type="button">Today</button>
+      <button class="btn ghost sm" id="adClear" type="button">Clear filters</button>
+      <button class="btn ghost sm" id="adRefresh" type="button">Refresh</button>
+    </div>`;
+  $('#deliveryTableWrap').before(bar);
+  const rerender = () => { pageState.delivery = 0; renderDelivery(); };
+  $('#adDateFilter').addEventListener('change', e => { adFilterDate = e.target.value; rerender(); });
+  $('#adPartnerFilter').addEventListener('change', e => { adFilterPartner = e.target.value; rerender(); });
+  $('#adToday').addEventListener('click', () => { adFilterDate = todayLocalISO(); $('#adDateFilter').value = adFilterDate; rerender(); });
+  $('#adClear').addEventListener('click', () => { adFilterDate = ''; adFilterPartner = ''; $('#adDateFilter').value = ''; rerender(); });
+  $('#adRefresh').addEventListener('click', () => loadData());
+}
+function applyAdminDeliveryFilters(){
+  // partner list = known partners + any name already on a bill (capitals/spaces ignored)
+  const seen = new Map();
+  [...DELIVERY_PARTNER_OPTIONS, ...bills.map(b => (b.deliveryPartner||'').trim())]
+    .forEach(n => { if(n && !seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n); });
+  const sel = $('#adPartnerFilter');
+  sel.innerHTML = '<option value="">All</option><option value="__none__">Unassigned</option>' +
+    [...seen.values()].sort((a,b) => a.localeCompare(b)).map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  sel.value = adFilterPartner;
+  $('#adDateFilter').value = adFilterDate;
+  return bills.filter(b => {
+    if(adFilterDate && b.deliveryDate !== adFilterDate) return false;
+    const p = (b.deliveryPartner||'').trim().toLowerCase();
+    if(adFilterPartner === '__none__') return !p;
+    if(adFilterPartner) return p === adFilterPartner.toLowerCase();
+    return true;
+  });
+}
+
 function renderDelivery(){
-  if(userRole === 'delivery'){ renderDeliveryPartnerView(); return; }
-  $('#deliveryCount').textContent = `${bills.length} bills`;
-  const sorted = [...bills].sort((a,b) => (a.date||'').localeCompare(b.date||'') || 0).reverse();
+  if(isStaff()){ renderDeliveryPartnerView(); return; }
+  ensureAdminFilterBar();
+  const filtered = applyAdminDeliveryFilters();
+  $('#deliveryCount').textContent = (adFilterDate || adFilterPartner) ? `${filtered.length} of ${bills.length} bills` : `${bills.length} bills`;
+  const sorted = [...filtered].sort((a,b) => (a.date||'').localeCompare(b.date||'') || 0).reverse();
   const {slice} = paginate(sorted, 'delivery');
   deliveryRowOrder = slice.map(b => b.id);
   const wrap = $('#deliveryTableWrap');
 
-  if(!bills.length){
-    wrap.innerHTML = emptyState('No bills yet', 'Import your sales register on the first tab to get started.');
+  if(!filtered.length){
+    wrap.innerHTML = bills.length
+      ? emptyState('No bills match these filters', 'Change or clear the delivery date / partner filter above.')
+      : emptyState('No bills yet', 'Import your sales register on the first tab to get started.');
     $('#deliveryPager').innerHTML = '';
     return;
   }
@@ -1334,7 +1450,7 @@ function renderDelivery(){
 
   wireEditableRows(wrap, sorted);
   wireComboField(wrap, '.sp-combo', 'salesPerson', SALES_PERSON_OPTIONS, 'Sales Person');
-  wireComboField(wrap, '.dp-combo', 'deliveryPartner', DELIVERY_PARTNER_OPTIONS, 'Delivery Partner');
+  wireComboField(wrap, '.dp-combo', 'deliveryPartner', deliveryPickOptions(), 'Delivery Partner');
   renderPager($('#deliveryPager'), 'delivery', sorted, renderDelivery);
 }
 
@@ -1352,23 +1468,26 @@ function ensureDpFilterBar(){
       <div><label>Delivery date</label><input type="date" id="dpDateFilter"></div>
       <button class="btn ghost sm" id="dpToday" type="button">Today</button>
       <button class="btn ghost sm" id="dpAll" type="button">Show all</button>
+      <button class="btn ghost sm" id="dpRefresh" type="button">Refresh</button>
     </div>`;
   $('#deliveryTableWrap').before(bar);
   const apply = (v) => { dpFilterDate = v; $('#dpDateFilter').value = v; pageState.delivery = 0; renderDelivery(); };
   $('#dpDateFilter').addEventListener('change', e => apply(e.target.value));
   $('#dpToday').addEventListener('click', () => apply(todayLocalISO()));
   $('#dpAll').addEventListener('click', () => apply(''));
+  $('#dpRefresh').addEventListener('click', () => loadData());
 }
 function renderDeliveryPartnerView(){
   ensureDpFilterBar();
-  const mine = bills.filter(b => !dpFilterDate || b.deliveryDate === dpFilterDate)
+  const base = bills.filter(b => sameName(b.deliveryPartner, partnerName));   // bills I deliver (collection-only bills live in Signed Bills)
+  const mine = base.filter(b => !dpFilterDate || b.deliveryDate === dpFilterDate)
     .sort((a,b) => (a.date||'').localeCompare(b.date||'')).reverse();
   $('#deliveryCount').textContent = dpFilterDate
-    ? `${mine.length} of ${bills.length} bills · delivery date ${dpFilterDate}`
-    : `${bills.length} bills assigned to you`;
+    ? `${mine.length} of ${base.length} bills · delivery date ${dpFilterDate}`
+    : `${base.length} bills assigned to you`;
   const wrap = $('#deliveryTableWrap');
   if(!mine.length){
-    wrap.innerHTML = bills.length
+    wrap.innerHTML = base.length
       ? emptyState('No bills for this date', 'Pick another delivery date, or press “Show all”.')
       : emptyState('No bills assigned yet', 'Bills the office assigns to you will show up here.');
     $('#deliveryPager').innerHTML = '';
@@ -1544,7 +1663,7 @@ const COL_COUNT_SIGNED = 14; // for the expanded detail row's colspan
 
 function renderSigned(){
   wireSignedFilters();
-  const signed = bills.filter(b => (b.deliveryStatus||'').toLowerCase() === 'signed');
+  const signed = bills.filter(b => (b.deliveryStatus||'').toLowerCase() === 'signed' && (!isStaff() || hasMyVisit(b)));   // staff: only bills with a collection visit assigned to them
 
   // populate dropdown option lists from the full signed set (before filtering)
   const areas = [...new Set(signed.map(b=>b.area).filter(Boolean))].sort();
@@ -1644,40 +1763,46 @@ function renderSigned(){
 
 /* ---- visit log: one open-ended collection-attempt history per bill ---- */
 function renderVisitLogPanel(bill){
+  const staff = isStaff();
   const visits = [...(bill.visits||[])].sort((a,b) => (a.date||'').localeCompare(b.date||''));
-  const table = visits.length ? `<table class="visit-table">
-    <thead><tr><th>Date</th><th>Assigned To</th><th>Status</th><th class="num">Amount Collected</th><th>Notes</th><th></th></tr></thead>
-    <tbody>${visits.map(v => `<tr data-visit-id="${v.id}">
+  const statusOpts = sel => COLLECTION_STATUS_OPTIONS.map(o=>`<option value="${o}" ${sel===o?'selected':''}>${o||'—'}</option>`).join('');
+  const rowHtml = v => {
+    if(staff && !sameName(v.assignedTo, partnerName)){      // someone else's visit: visible so balances add up, but read-only
+      return `<tr data-visit-id="${v.id}">
+        <td class="mono">${escapeHtml(v.date||'')}</td><td>${escapeHtml(v.assignedTo||'')}</td><td>${escapeHtml(v.status||'—')}</td>
+        <td class="num mono">${fmtMoney(v.amount)}</td><td>${escapeHtml(v.notes||'')}</td><td><span class="footnote">someone else's visit</span></td></tr>`;
+    }
+    return `<tr data-visit-id="${v.id}">
       <td><input type="date" class="ve-date" value="${v.date||''}"></td>
-      <td><select class="ve-assigned">
+      <td>${staff ? escapeHtml(v.assignedTo||'') : `<select class="ve-assigned">
             <option value="">— choose —</option>
             ${ASSIGNED_FOR_OPTIONS.map(n=>`<option value="${escapeHtml(n)}" ${v.assignedTo===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}
-          </select></td>
-      <td><select class="ve-status">
-            ${COLLECTION_STATUS_OPTIONS.map(o=>`<option value="${o}" ${v.status===o?'selected':''}>${o||'—'}</option>`).join('')}
-          </select></td>
+          </select>`}</td>
+      <td><select class="ve-status">${statusOpts(v.status)}</select></td>
       <td><input type="number" class="num ve-amount" value="${v.amount??''}" style="min-width:90px;"></td>
       <td><input type="text" class="ve-notes" value="${escapeHtml(v.notes||'')}" style="min-width:130px;"></td>
       <td style="white-space:nowrap;">
         <button class="btn primary sm" data-save-visit="${v.id}">Save</button>
-        <button class="btn ghost sm" data-del-visit="${v.id}">✕</button>
+        ${staff ? '' : `<button class="btn ghost sm" data-del-visit="${v.id}">✕</button>`}
       </td>
-    </tr>`).join('')}</tbody>
+    </tr>`;
+  };
+  const table = visits.length ? `<table class="visit-table">
+    <thead><tr><th>Date</th><th>Assigned To</th><th>Status</th><th class="num">Amount Collected</th><th>Notes</th><th></th></tr></thead>
+    <tbody>${visits.map(rowHtml).join('')}</tbody>
   </table>` : `<div class="visit-empty-note">No collection attempts logged yet for this bill — add the first one below.</div>`;
 
   return `${table}
     <div class="visit-add-form">
       <div><label>Date</label><input type="date" class="va-date"></div>
       <div><label>Assigned To</label>
-        <select class="va-assigned">
+        ${staff ? `<div style="padding:9px 0; font-weight:600;">${escapeHtml(partnerName)}</div>` : `<select class="va-assigned">
           <option value="">— choose —</option>
           ${ASSIGNED_FOR_OPTIONS.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
-        </select>
+        </select>`}
       </div>
       <div><label>Status</label>
-        <select class="va-status">
-          ${COLLECTION_STATUS_OPTIONS.map(o=>`<option value="${o}">${o||'—'}</option>`).join('')}
-        </select>
+        <select class="va-status">${COLLECTION_STATUS_OPTIONS.map(o=>`<option value="${o}">${o||'—'}</option>`).join('')}</select>
       </div>
       <div><label>Amount Collected</label><input type="number" class="num va-amount" placeholder="0"></div>
       <div style="flex:1; min-width:160px;"><label>Notes</label><input type="text" class="va-notes" placeholder="e.g. shop closed, promised Friday"></div>
@@ -1703,7 +1828,7 @@ function wireVisitLogPanel(tr, bill){
       const visit = (bill.visits||[]).find(v => v.id === visitId);
       if(!visit || !row) return;
       visit.date = $('.ve-date', row).value;
-      visit.assignedTo = $('.ve-assigned', row).value;
+      const asg = $('.ve-assigned', row); if(asg) visit.assignedTo = asg.value;   // staff cannot hand a visit to someone else
       visit.status = $('.ve-status', row).value;
       visit.amount = toNum($('.ve-amount', row).value);
       visit.notes = $('.ve-notes', row).value.trim();
@@ -1716,11 +1841,11 @@ function wireVisitLogPanel(tr, bill){
   if(addBtn){
     addBtn.addEventListener('click', () => {
       const date = $('.va-date', tr).value;
-      const assignedTo = $('.va-assigned', tr).value;
+      const assignedTo = isStaff() ? partnerName : $('.va-assigned', tr).value;
       const status = $('.va-status', tr).value;
       const amount = toNum($('.va-amount', tr).value);
       const notes = $('.va-notes', tr).value.trim();
-      if(!date && !assignedTo && !status && !amount && !notes){
+      if(!date && (isStaff() || !assignedTo) && !status && !amount && !notes){
         toast('Fill in at least one field before adding a visit.');
         return;
       }
@@ -1746,11 +1871,16 @@ const agentExpanded = new Set();   // delivery partners whose bill list is open 
 async function setVerified(ids, value){
   if(!sb || !ids.length) return;
   setSaveStatus('saving', 'Saving…');
+  const chunks = []; for(let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
   if(value){
-    const { data: fresh, error: fe } = await sb.from('bills')
-      .select('id,delivery_date,delivery_status,amount_at_delivery,comments').in('id', ids);
-    if(fe){ toast('Could not check the bills — ' + fe.message); setSaveStatus('idle', 'Failed'); return; }
-    const changed = (fresh||[]).some(r => {
+    const fresh = [];
+    for(const c of chunks){
+      const { data, error: fe } = await sb.from('bills')
+        .select('id,delivery_date,delivery_status,amount_at_delivery,comments').in('id', c);
+      if(fe){ toast('Could not check the bills — ' + fe.message); setSaveStatus('idle', 'Failed'); return; }
+      fresh.push(...data);
+    }
+    const changed = fresh.some(r => {
       const b = bills.find(x => x.id === r.id); if(!b) return false;
       const row = billToRow(b);
       return ['delivery_date','delivery_status','amount_at_delivery','comments'].some(k => (row[k] ?? null) !== (r[k] ?? null));
@@ -1765,8 +1895,10 @@ async function setVerified(ids, value){
   const patch = value
     ? { verified: true, verified_at: new Date().toISOString(), verified_by: session?.user?.id ?? null }
     : { verified: false, verified_at: null, verified_by: null };
-  const { error } = await sb.from('bills').update(patch).in('id', ids);
-  if(error){ console.error(error); toast('Could not update verification — ' + error.message); setSaveStatus('idle', 'Failed'); return; }
+  for(const c of chunks){
+    const { error } = await sb.from('bills').update(patch).in('id', c);
+    if(error){ console.error(error); toast('Could not update verification — ' + error.message); setSaveStatus('idle', 'Failed'); return; }
+  }
   bills.forEach(b => { if(ids.includes(b.id)) b.verified = value; });
   setSaveStatus('idle', 'Saved');
   toast(value ? `${ids.length} bill${ids.length===1?'':'s'} verified and locked.` : 'Verification removed — the partner can edit again.');
@@ -2104,7 +2236,7 @@ async function enterApp(session){
   if(enteredFor === session.user.id) return;
   const { data: roleRow, error } = await sb.from('user_roles')
     .select('role,name,active').eq('user_id', session.user.id).maybeSingle();
-  if(error || !roleRow || !roleRow.active || !['admin','delivery'].includes(roleRow.role)){
+  if(error || !roleRow || !roleRow.active || !['admin','delivery','sales'].includes(roleRow.role)){
     await sb.auth.signOut();
     const errEl = $('#loginError');
     errEl.textContent = 'This account does not have access. Please contact the administrator.';
@@ -2120,18 +2252,24 @@ async function enterApp(session){
 }
 
 function applyRoleUI(){
-  if(userRole !== 'delivery') return;
+  if(!isStaff()) return;
+  // Delivery partners and sales persons get two tabs: Delivery Details and Signed Bills
+  const allowed = ['delivery', 'signed'];
   $$('#tabNav button').forEach(b => {
-    const isDelivery = b.dataset.tab === 'delivery';
-    b.style.display = isDelivery ? '' : 'none';
-    b.classList.toggle('active', isDelivery);
+    const ok = allowed.includes(b.dataset.tab);
+    b.style.display = ok ? '' : 'none';
+    b.classList.toggle('active', b.dataset.tab === 'delivery');
   });
   $$('.tabview').forEach(v => v.classList.toggle('active', v.id === 'tab-delivery'));
   $('#backupBtn').style.display = 'none';
   const title = $('#tab-delivery .section-title');
   if(title) title.textContent = 'My deliveries' + (partnerName ? ' — ' + partnerName : '');
   const hint = $('#tab-delivery .helptext');
-  if(hint) hint.textContent = 'These are the bills assigned to you. Update the delivery date, status, amount collected and comments as you deliver.';
+  if(hint) hint.textContent = 'These are the bills assigned to you for delivery. Update the delivery date, status, amount collected and comments as you deliver.';
+  const sTitle = $('#tab-signed .section-title');
+  if(sTitle) sTitle.textContent = 'My collections' + (partnerName ? ' — ' + partnerName : '');
+  const sHint = $('#tab-signed .helptext');
+  if(sHint) sHint.textContent = 'Signed bills where a collection visit is assigned to you. Open “Collection Visits” on a bill to log your attempts and the amount collected, and set the next visit date.';
 }
 
 async function checkAuthAndBoot(){

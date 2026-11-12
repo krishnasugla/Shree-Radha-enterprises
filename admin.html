@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin – Delivery Partners</title>
+<title>Admin – Delivery Partners &amp; Sales Persons</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -19,6 +19,7 @@
   h2{font-size:15px;margin:0 0 14px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
   label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:5px;}
+  select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:14px;background:#fff;}
   input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:14px;}
   input:focus{outline:2px solid var(--amber);border-color:var(--amber);}
   button{font:inherit;font-size:13px;font-weight:600;border-radius:6px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);}
@@ -39,23 +40,25 @@
 </style>
 </head>
 <body>
-<header><h1>Admin – Delivery Partners</h1><a href="index.html">← Back to ledger</a></header>
+<header><h1>Admin – Delivery Partners &amp; Sales Persons</h1><a href="index.html">← Back to ledger</a></header>
 
 <main id="app" hidden>
   <div class="panel">
-    <h2>Add delivery partner</h2>
+    <h2>Add login</h2>
     <div class="grid">
+      <div><label for="role">Type</label>
+        <select id="role"><option value="delivery">Delivery partner</option><option value="sales">Sales person</option></select></div>
       <div><label for="name">Name (as used on bills)</label><input id="name" autocomplete="off" placeholder="e.g. Mukesh"></div>
       <div><label for="loginid">Login ID (name + 4 digits)</label><input id="loginid" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. mukesh4821"></div>
       <div><label for="pwd">Password (min 8 characters)</label><input id="pwd" type="text" autocomplete="off"></div>
     </div>
     <button class="primary" id="createBtn">Create account</button>
     <div class="msg" id="createMsg" hidden></div>
-    <p class="muted">The name is what appears in the ledger's Delivery Partner column; bills assigned to that name are the only bills this person will see. The Login ID is filled in for you from the name (you can change it): letters followed by exactly 4 digits.</p>
+    <p class="muted">Use the name exactly as it appears on bills (Delivery Partner, Sales Person or a collection visit's “Assigned To”). Whenever a bill or visit is assigned to that name, even before the login exists, it shows up in this person's login: Delivery Details for bills they deliver, Signed Bills for collection visits assigned to them. The Login ID is filled in from the name (you can change it): letters followed by exactly 4 digits.</p>
   </div>
 
   <div class="panel">
-    <h2>Delivery partners</h2>
+    <h2>Delivery partners &amp; sales persons</h2>
     <div id="list" class="muted">Loading…</div>
   </div>
 </main>
@@ -81,15 +84,15 @@ async function manage(body){
 }
 
 async function loadList(){
-  const { data, error } = await sb.from('user_roles').select('user_id,name,login_id,email,active')
-    .eq('role','delivery').order('name');
+  const { data, error } = await sb.from('user_roles').select('user_id,name,login_id,email,role,active')
+    .in('role',['delivery','sales']).order('name');
   const box = $('#list');
   if(error){ box.textContent = 'Could not load: ' + error.message; return; }
   if(!data.length){ box.textContent = 'No delivery partners yet.'; return; }
   box.className = '';
-  box.innerHTML = `<table><thead><tr><th>Name</th><th>Login ID</th><th>Status</th><th></th></tr></thead><tbody>` +
+  box.innerHTML = `<table><thead><tr><th>Name</th><th>Type</th><th>Login ID</th><th>Status</th><th></th></tr></thead><tbody>` +
     data.map(p => `<tr>
-      <td>${esc(p.name)}</td><td class="mono">${esc(p.login_id || p.email)}</td>
+      <td>${esc(p.name)}</td><td>${p.role==='sales'?'Sales person':'Delivery partner'}</td><td class="mono">${esc(p.login_id || p.email)}</td>
       <td><span class="pill ${p.active?'on':'off'}">${p.active?'Active':'Deactivated'}</span></td>
       <td class="actions">
         <button data-reset="${p.user_id}">Reset password</button>
@@ -101,13 +104,13 @@ $('#list').addEventListener('click', async (e) => {
   const reset = e.target.dataset.reset, toggle = e.target.dataset.toggle;
   try {
     if(reset){
-      const pw = prompt('New password for this delivery partner (min 8 characters):');
+      const pw = prompt('New password for this person (min 8 characters):');
       if(!pw) return;
       await manage({ action:'reset_password', user_id: reset, password: pw });
-      alert('Password updated. Give the new password to the delivery partner.');
+      alert('Password updated. Give the new password to this person.');
     } else if(toggle){
       const makeActive = e.target.dataset.active !== 'true';
-      if(!makeActive && !confirm('Deactivate this delivery partner? They will be logged out of access immediately.')) return;
+      if(!makeActive && !confirm('Deactivate this login? They lose access immediately.')) return;
       await manage({ action:'set_active', user_id: toggle, active: makeActive });
       loadList();
     }
@@ -131,7 +134,7 @@ $('#createBtn').addEventListener('click', async () => {
   if(!/^[a-z]+[0-9]{4}$/.test(loginId)){ show(msg, 'Login ID must be letters followed by exactly 4 digits, e.g. mukesh4821.', false); return; }
   btn.disabled = true; btn.textContent = 'Creating…';
   try {
-    await manage({ action:'create', name, login_id: loginId, password });
+    await manage({ action:'create', name, login_id: loginId, password, role: $('#role').value });
     show(msg, `Account created. Give ${name} the Login ID "${loginId}" and the password you set. They sign in at ${location.origin}/`, true);
     $('#name').value = $('#loginid').value = $('#pwd').value = '';
     loginEdited = false; suggestDigits = String(Math.floor(1000 + Math.random()*9000));

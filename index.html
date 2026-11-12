@@ -1342,6 +1342,52 @@ document.addEventListener('mouseup', () => {
 /* ============================================================
    RENDER: Delivery Details
    ============================================================ */
+/* Extra Delivery Details filters, shared by the admin and staff views:
+   Billing date (from / to), Company, Sales person, Area. '' = all; '__none__' = no sales person. */
+const dlx = { billFrom:'', billTo:'', company:'', sales:'', area:'' };
+const dlxActive = () => Object.values(dlx).some(v => v);
+function dlxClear(){ Object.keys(dlx).forEach(k => { dlx[k] = ''; }); }
+function dlxBarHtml(){
+  return `<div class="row" style="margin-top:10px;">
+      <div><label>Billing date from</label><input type="date" id="dlBillFrom"></div>
+      <div><label>Billing date to</label><input type="date" id="dlBillTo"></div>
+      <div><label>Company</label><select id="dlCompany" style="min-width:140px;"></select></div>
+      <div><label>Sales person</label><select id="dlSales" style="min-width:140px;"></select></div>
+      <div><label>Area</label><select id="dlArea" style="min-width:140px;"></select></div>
+    </div>`;
+}
+function dlxWire(rerender){
+  const map = { dlBillFrom:'billFrom', dlBillTo:'billTo', dlCompany:'company', dlSales:'sales', dlArea:'area' };
+  Object.keys(map).forEach(id => $('#' + id).addEventListener('change', e => { dlx[map[id]] = e.target.value; rerender(); }));
+}
+/* Fill the dropdowns from the bills in `list` (before any filtering) and keep the current choice */
+function dlxFill(list, salesExtra){
+  const uniq = arr => { const m = new Map(); arr.forEach(x => { const s = (x||'').trim(); if(s && !m.has(s.toLowerCase())) m.set(s.toLowerCase(), s); }); return [...m.values()].sort((a,b) => a.localeCompare(b)); };
+  const fill = (sel, values, current, extra) => {
+    const vals = values.slice();
+    if(current && current !== '__none__' && !vals.some(v => sameName(v, current))) vals.push(current);
+    sel.innerHTML = '<option value="">All</option>' + (extra||'') + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    sel.value = current;
+  };
+  fill($('#dlCompany'), uniq(list.map(b => b.company)), dlx.company);
+  fill($('#dlArea'), uniq(list.map(b => b.area)), dlx.area);
+  fill($('#dlSales'), uniq([...(salesExtra||[]), ...list.map(b => b.salesPerson)]), dlx.sales, '<option value="__none__">Unassigned</option>');
+  $('#dlBillFrom').value = dlx.billFrom;
+  $('#dlBillTo').value = dlx.billTo;
+}
+function dlxApply(list){
+  return list.filter(b => {
+    if(dlx.billFrom && (b.date||'') < dlx.billFrom) return false;
+    if(dlx.billTo && (b.date||'') > dlx.billTo) return false;
+    if(dlx.company && !sameName(b.company, dlx.company)) return false;
+    if(dlx.area && !sameName(b.area, dlx.area)) return false;
+    const sp = (b.salesPerson||'').trim();
+    if(dlx.sales === '__none__') return !sp;
+    if(dlx.sales && !sameName(sp, dlx.sales)) return false;
+    return true;
+  });
+}
+
 let adFilterDate = '', adFilterPartner = '';   // '' = all; '__none__' = unassigned
 function ensureAdminFilterBar(){
   if($('#adFilterBar')) return;
@@ -1353,13 +1399,14 @@ function ensureAdminFilterBar(){
       <button class="btn ghost sm" id="adToday" type="button">Today</button>
       <button class="btn ghost sm" id="adClear" type="button">Clear filters</button>
       <button class="btn ghost sm" id="adRefresh" type="button">Refresh</button>
-    </div>`;
+    </div>` + dlxBarHtml();
   $('#deliveryTableWrap').before(bar);
   const rerender = () => { pageState.delivery = 0; renderDelivery(); };
+  dlxWire(rerender);
   $('#adDateFilter').addEventListener('change', e => { adFilterDate = e.target.value; rerender(); });
   $('#adPartnerFilter').addEventListener('change', e => { adFilterPartner = e.target.value; rerender(); });
   $('#adToday').addEventListener('click', () => { adFilterDate = todayLocalISO(); $('#adDateFilter').value = adFilterDate; rerender(); });
-  $('#adClear').addEventListener('click', () => { adFilterDate = ''; adFilterPartner = ''; $('#adDateFilter').value = ''; rerender(); });
+  $('#adClear').addEventListener('click', () => { adFilterDate = ''; adFilterPartner = ''; dlxClear(); rerender(); });
   $('#adRefresh').addEventListener('click', () => loadData());
 }
 function applyAdminDeliveryFilters(){
@@ -1372,7 +1419,8 @@ function applyAdminDeliveryFilters(){
     [...seen.values()].sort((a,b) => a.localeCompare(b)).map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   sel.value = adFilterPartner;
   $('#adDateFilter').value = adFilterDate;
-  return bills.filter(b => {
+  dlxFill(bills, SALES_PERSON_OPTIONS);
+  return dlxApply(bills).filter(b => {
     if(adFilterDate && b.deliveryDate !== adFilterDate) return false;
     const p = (b.deliveryPartner||'').trim().toLowerCase();
     if(adFilterPartner === '__none__') return !p;
@@ -1385,7 +1433,7 @@ function renderDelivery(){
   if(isStaff()){ renderDeliveryPartnerView(); return; }
   ensureAdminFilterBar();
   const filtered = applyAdminDeliveryFilters();
-  $('#deliveryCount').textContent = (adFilterDate || adFilterPartner) ? `${filtered.length} of ${bills.length} bills` : `${bills.length} bills`;
+  $('#deliveryCount').textContent = (adFilterDate || adFilterPartner || dlxActive()) ? `${filtered.length} of ${bills.length} bills` : `${bills.length} bills`;
   const sorted = [...filtered].sort((a,b) => (a.date||'').localeCompare(b.date||'') || 0).reverse();
   const {slice} = paginate(sorted, 'delivery');
   deliveryRowOrder = slice.map(b => b.id);
@@ -1393,7 +1441,7 @@ function renderDelivery(){
 
   if(!filtered.length){
     wrap.innerHTML = bills.length
-      ? emptyState('No bills match these filters', 'Change or clear the delivery date / partner filter above.')
+      ? emptyState('No bills match these filters', 'Change or clear the filters above.')
       : emptyState('No bills yet', 'Import your sales register on the first tab to get started.');
     $('#deliveryPager').innerHTML = '';
     return;
@@ -1441,7 +1489,7 @@ function renderDelivery(){
 
   wrap.innerHTML = `<table>
     <thead><tr>
-      <th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th>
+      <th>Company</th><th>Billing date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th>
       <th>Delivery Date</th><th>Area</th><th>Sales Person</th><th>Delivery Partner</th><th>Delivery Status</th>
       <th class="num">Amount Collected</th><th class="num">Discount</th><th>Comments</th><th class="num">Balance</th><th></th>
     </tr></thead>
@@ -1469,26 +1517,28 @@ function ensureDpFilterBar(){
       <button class="btn ghost sm" id="dpToday" type="button">Today</button>
       <button class="btn ghost sm" id="dpAll" type="button">Show all</button>
       <button class="btn ghost sm" id="dpRefresh" type="button">Refresh</button>
-    </div>`;
+    </div>` + dlxBarHtml();
   $('#deliveryTableWrap').before(bar);
   const apply = (v) => { dpFilterDate = v; $('#dpDateFilter').value = v; pageState.delivery = 0; renderDelivery(); };
+  dlxWire(() => { pageState.delivery = 0; renderDelivery(); });
   $('#dpDateFilter').addEventListener('change', e => apply(e.target.value));
   $('#dpToday').addEventListener('click', () => apply(todayLocalISO()));
-  $('#dpAll').addEventListener('click', () => apply(''));
+  $('#dpAll').addEventListener('click', () => { dlxClear(); apply(''); });
   $('#dpRefresh').addEventListener('click', () => loadData());
 }
 function renderDeliveryPartnerView(){
   ensureDpFilterBar();
   const base = bills.filter(b => sameName(b.deliveryPartner, partnerName));   // bills I deliver (collection-only bills live in Signed Bills)
-  const mine = base.filter(b => !dpFilterDate || b.deliveryDate === dpFilterDate)
+  dlxFill(base);
+  const mine = dlxApply(base).filter(b => !dpFilterDate || b.deliveryDate === dpFilterDate)
     .sort((a,b) => (a.date||'').localeCompare(b.date||'')).reverse();
-  $('#deliveryCount').textContent = dpFilterDate
-    ? `${mine.length} of ${base.length} bills · delivery date ${dpFilterDate}`
+  $('#deliveryCount').textContent = (dpFilterDate || dlxActive())
+    ? `${mine.length} of ${base.length} bills match your filters`
     : `${base.length} bills assigned to you`;
   const wrap = $('#deliveryTableWrap');
   if(!mine.length){
     wrap.innerHTML = base.length
-      ? emptyState('No bills for this date', 'Pick another delivery date, or press “Show all”.')
+      ? emptyState('No bills match these filters', 'Change the filters, or press “Show all”.')
       : emptyState('No bills assigned yet', 'Bills the office assigns to you will show up here.');
     $('#deliveryPager').innerHTML = '';
     return;
@@ -1511,7 +1561,7 @@ function renderDeliveryPartnerView(){
     </tr>`; }).join('');
   wrap.innerHTML = `<table>
     <thead><tr>
-      <th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th><th>Area</th>
+      <th>Company</th><th>Billing date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th><th>Area</th>
       <th>Delivery Date</th><th>Delivery Status</th><th class="num">Amount Collected</th><th class="num">Discount</th><th>Comments</th><th class="num">Balance</th><th>Office check</th>
     </tr></thead>
     <tbody>${rows}</tbody>

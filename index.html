@@ -1626,13 +1626,12 @@ function renderDeliveryPartnerView(){
   ensureDpFilterBar();
   const base = bills.filter(b => sameName(b.deliveryPartner, partnerName));   // bills I deliver (collection-only bills live in Signed Bills)
   dlxFill(base);
-  const staffFiltering = !!(dpFilterDate || dlxActive());
   const mine = dlxApply(base).filter(b => !dpFilterDate || b.deliveryDate === dpFilterDate)
-    .sort(staffFiltering ? cmpVoucherDesc : (a,b) => (b.date||'').localeCompare(a.date||''));
+    .sort(cmpVoucherDesc);   // always highest voucher number first, so a bill is quick to find
   deliveryExportRows = mine;
   $('#deliveryCount').textContent = (dpFilterDate || dlxActive())
     ? `${mine.length} of ${base.length} bills match your filters${SORT_NOTE}`
-    : `${base.length} bills assigned to you`;
+    : `${base.length} bills assigned to you${SORT_NOTE}`;
   const wrap = $('#deliveryTableWrap');
   if(!mine.length){
     wrap.innerHTML = base.length
@@ -2103,6 +2102,9 @@ function renderAgent(){
       // the sales person's — only credit it here for the Delivery Partner table.
       if(field === 'deliveryPartner'){
         if(status==='cash'){ g.cash += toNum(b.amountAtDelivery); g.cashCount++; }
+        // Signed bill with an amount entered = the partner received that much cash at the door
+        // (the rest stays pending). It counts as cash collected, though the bill is still a Signed bill.
+        if(status==='signed'){ g.cash += toNum(b.amountAtDelivery); }
         if(status==='upi/bank' || status==='cheque'){ g.bank += toNum(b.amountAtDelivery); }
       }
     });
@@ -2293,6 +2295,9 @@ function renderCash(){
       const r = ensure(b.deliveryDate);
       r.bankOnDelivery += toNum(b.amountAtDelivery);
       r.bankBillsCount++;
+    }
+    if(status === 'signed' && b.deliveryDate && toNum(b.amountAtDelivery) > 0){
+      ensure(b.deliveryDate).cashOnDelivery += toNum(b.amountAtDelivery);   // cash received at the door on a signed bill
     }
     if(status === 'signed'){
       (b.visits||[]).forEach(v => {

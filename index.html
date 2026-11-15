@@ -458,6 +458,7 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
       <h2 class="section-title" style="margin:0;">Fill in delivery &amp; collection info for each bill</h2>
       <div style="display:flex; align-items:center; gap:12px;">
         <span class="footnote" id="deliveryCount"></span>
+        <button class="btn ghost" id="deliveryExportBtn" type="button">⬇ Download Excel</button>
         <button class="btn ghost sm discard-btn" type="button" hidden>Discard</button>
         <button class="btn primary save-all-btn" type="button" disabled>Save changes</button>
       </div>
@@ -474,6 +475,7 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
       <h2 class="section-title" style="margin:0;">Bills signed for, payment still pending</h2>
       <div style="display:flex; align-items:center; gap:12px;">
         <span class="footnote" id="signedCount"></span>
+        <button class="btn ghost" id="signedExportBtn" type="button">⬇ Download Excel</button>
         <button class="btn ghost sm discard-btn" type="button" hidden>Discard</button>
         <button class="btn primary save-all-btn" type="button" disabled>Save changes</button>
       </div>
@@ -514,9 +516,7 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
         <div>
           <button class="btn ghost" id="f-clear">Clear filters</button>
         </div>
-        <div>
-          <button class="btn ghost" id="signedExportBtn" type="button">Download Excel</button>
-        </div>
+
       </div>
     </div>
 
@@ -1048,6 +1048,56 @@ function statusBadgeClass(status){
 
 /* ---------------- import / parsing ---------------- */
 let pendingImport = [];
+let importSkipped = { existing: [], inFile: [] };   // rows left out because they are duplicates
+let importing = false;
+
+/* ---- Duplicate protection for imports ---------------------------------
+   Same Company + same Vch/Bill No in the same financial year (April–March) = the same bill, so it is
+   never added twice (capitals and extra spaces ignored). Voucher numbers restart each year, so "2907"
+   next April is a different bill. A row with no voucher number only counts as a duplicate when company,
+   date, retailer and amount are all identical. */
+const normKey = s => String(s||'').trim().replace(/\s+/g, ' ').toLowerCase();
+const fiscalYear = d => { const m = /^(\d{4})-(\d{2})/.exec(d||''); return m ? String(+m[2] >= 4 ? +m[1] : +m[1] - 1) : ''; };
+function importKey(b){
+  const no = normKey(b.billNo);
+  if(no) return `${normKey(b.company)}|${no}|${fiscalYear(b.date)}`;
+  return `${normKey(b.company)}||${b.date||''}|${normKey(b.retailer)}|${toNum(b.totalAmount)}`;
+}
+function splitDuplicates(rows, existingBills){
+  const exact = new Set(), loose = new Set(), seen = new Set();
+  existingBills.forEach(b => { exact.add(importKey(b)); if(normKey(b.billNo)) loose.add(normKey(b.company) + '|' + normKey(b.billNo)); });
+  const isExisting = r => exact.has(importKey(r)) ||
+    (!fiscalYear(r.date) && normKey(r.billNo) && loose.has(normKey(r.company) + '|' + normKey(r.billNo)));   // no date on the row: match on voucher number alone
+  const fresh = [], existing = [], inFile = [];
+  rows.forEach(r => {
+    const k = importKey(r);
+    if(isExisting(r)) existing.push(r);
+    else if(seen.has(k)) inFile.push(r);
+    else { seen.add(k); fresh.push(r); }
+  });
+  return { fresh, existing, inFile };
+}
+function applyDuplicateFilter(){
+  const { fresh, existing, inFile } = splitDuplicates(pendingImport, bills);
+  pendingImport = fresh; importSkipped = { existing, inFile };
+}
+function importSummaryText(parsed){
+  const s = importSkipped.existing.length + importSkipped.inFile.length;
+  return `${parsed} rows read — ${pendingImport.length} new` + (s ? `, ${s} duplicate${s===1?'':'s'} skipped.` : '.');
+}
+/* Read company / voucher / date of EVERY bill straight from the database (not just what this page loaded) */
+async function fetchExistingBills(){
+  const out = [], PAGE = 1000;
+  let from = 0;
+  while(true){
+    const { data, error } = await sb.from('bills').select('company,bill_no,date,retailer,total_amount').order('id', { ascending: true }).range(from, from + PAGE - 1);
+    if(error) throw error;
+    if(!data.length) break;
+    data.forEach(r => out.push({ company: r.company, billNo: r.bill_no, date: r.date, retailer: r.retailer, totalAmount: r.total_amount }));
+    from += data.length;
+  }
+  return out;
+}
 let excelState = { rows: [], headerRowIdx: -1, headers: [] };
 
 const FIELD_DEFS = [
@@ -1218,10 +1268,12 @@ $('#buildPreviewBtn').addEventListener('click', () => {
       visits: [], nextVisitPlanned:''
     };
   }).filter(r => r.company || r.billNo || r.retailer);
+  const parsedCount = pendingImport.length;
+  applyDuplicateFilter();
 
   const extraFieldsUsed = ['deliveryDate','area','salesPerson','deliveryPartner','deliveryStatus','amountAtDelivery','discount','comments']
     .filter(k => mapping[k] !== -1 && mapping[k] !== undefined);
-  $('#mapInfo').textContent = `${pendingImport.length} rows parsed` + (extraFieldsUsed.length ? ` — including ${extraFieldsUsed.length} extra column${extraFieldsUsed.length===1?'':'s'} beyond the core 5.` : '.');
+  $('#mapInfo').textContent = importSummaryText(parsedCount) + (extraFieldsUsed.length ? ` Includes ${extraFieldsUsed.length} extra column${extraFieldsUsed.length===1?'':'s'} beyond the core 5.` : '');
   renderPreview();
   $('#previewPanel').scrollIntoView({behavior:'smooth', block:'start'});
 });
@@ -1255,13 +1307,16 @@ $('#parseBtn').addEventListener('click', () => {
     };
   }).filter(r => r.company || r.billNo || r.retailer);
 
-  $('#parseInfo').textContent = `${pendingImport.length} rows parsed.`;
+  const parsedCount = pendingImport.length;
+  applyDuplicateFilter();
+  $('#parseInfo').textContent = importSummaryText(parsedCount);
   renderPreview();
 });
 
 function renderPreview(){
   const panel = $('#previewPanel');
-  if(!pendingImport.length){ panel.style.display='none'; return; }
+  const nExisting = importSkipped.existing.length, nInFile = importSkipped.inFile.length, nSkipped = nExisting + nInFile;
+  if(!pendingImport.length && !nSkipped){ panel.style.display = 'none'; return; }
   panel.style.display = 'block';
 
   const hasExtra = pendingImport.some(r => r.deliveryDate || r.area || r.salesPerson || r.deliveryPartner || r.deliveryStatus || r.amountAtDelivery !== '' || r.discount !== '' || r.comments);
@@ -1271,7 +1326,7 @@ function renderPreview(){
     ${hasExtra ? '<th>Delivery Date</th><th>Sales Person</th><th>Delivery Partner</th><th>Delivery Status</th>' : ''}
   </tr>`;
 
-  $('#previewBody').innerHTML = pendingImport.map(r => `
+  $('#previewBody').innerHTML = pendingImport.length ? pendingImport.map(r => `
     <tr>
       <td>${escapeHtml(r.company)}</td>
       <td>${escapeHtml(r.date)}</td>
@@ -1279,34 +1334,84 @@ function renderPreview(){
       <td>${escapeHtml(r.retailer)}</td>
       <td class="num">${fmtMoney(r.totalAmount)}</td>
       ${hasExtra ? `<td>${escapeHtml(r.deliveryDate)}</td><td>${escapeHtml(r.salesPerson)}</td><td>${escapeHtml(r.deliveryPartner)}</td><td>${escapeHtml(r.deliveryStatus)}</td>` : ''}
-    </tr>`).join('');
+    </tr>`).join('') : `<tr><td colspan="9" class="footnote">No new bills in this file.</td></tr>`;
 
-  // duplicate check against existing bills (company+billNo)
-  const existingKeys = new Set(bills.map(b => (b.company+'|'+b.billNo).toLowerCase()));
-  const dupes = pendingImport.filter(r => existingKeys.has((r.company+'|'+r.billNo).toLowerCase()));
-  const dupBox = $('#dupWarnBox');
-  dupBox.innerHTML = dupes.length
-    ? `<div class="dup-warn">⚠ ${dupes.length} of these rows share a Company + Bill No. with a bill already in the ledger. They'll still be added — check for accidental double-paste before continuing.</div>`
-    : '';
+  const n = pendingImport.length;
+  const commit = $('#commitBtn');
+  commit.disabled = !n || importing;
+  commit.textContent = importing ? commit.textContent : (n ? `Add ${n} new bill${n===1?'':'s'} to the ledger` : 'Nothing new to add');
+
+  // duplicates are never added; show what was left out and why
+  let html = '';
+  if(nSkipped){
+    const listed = [...importSkipped.existing.map(r => [r, 'Already in the ledger']), ...importSkipped.inFile.map(r => [r, 'Repeated in this file'])].slice(0, 200);
+    html = `<div class="dup-warn" style="font-size:13px;">⚠ ${nSkipped} duplicate bill${nSkipped===1?'':'s'} will NOT be added — ${nExisting} already in the ledger${nInFile ? `, ${nInFile} repeated inside your file` : ''}.
+      <details style="margin-top:6px;"><summary style="cursor:pointer;">Show the skipped bills</summary>
+        <div class="table-wrap" style="max-height:220px; margin-top:6px;"><table>
+          <thead><tr><th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th><th>Why skipped</th></tr></thead>
+          <tbody>${listed.map(([r, why]) => `<tr><td>${escapeHtml(r.company)}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.billNo)}</td><td>${escapeHtml(r.retailer)}</td><td class="num">${fmtMoney(r.totalAmount)}</td><td>${why}</td></tr>`).join('')}</tbody>
+        </table></div>
+        ${nSkipped > 200 ? '<div class="footnote">Showing the first 200.</div>' : ''}
+      </details></div>`;
+  }
+  $('#dupWarnBox').innerHTML = html;
 }
 
 $('#cancelPreviewBtn').addEventListener('click', () => {
-  pendingImport = [];
+  pendingImport = []; importSkipped = { existing: [], inFile: [] };
   renderPreview();
 });
 $('#clearBoxBtn').addEventListener('click', () => { $('#importBox').value=''; $('#parseInfo').textContent=''; });
 
-$('#commitBtn').addEventListener('click', () => {
-  if(!pendingImport.length) return;
-  const toInsert = pendingImport;
-  bills = bills.concat(pendingImport);
-  pendingImport = [];
-  $('#importBox').value = '';
-  $('#parseInfo').textContent = '';
-  renderPreview();
-  insertBillsRemote(toInsert);
-  renderAll();
-  toast('Bills added to the ledger.');
+$('#commitBtn').addEventListener('click', async () => {
+  if(!pendingImport.length || importing) return;
+  importing = true;
+  const btn = $('#commitBtn');
+  btn.disabled = true; btn.textContent = 'Checking for duplicates…';
+  const inserted = [];
+  try {
+    // Last check, against the database itself: someone else may have imported the same bills since this page loaded.
+    const existingBills = sb ? await fetchExistingBills() : bills;
+    const { fresh, existing, inFile } = splitDuplicates(pendingImport, existingBills);
+    const lateSkipped = existing.length + inFile.length;
+    if(!fresh.length){
+      importSkipped = { existing: [...importSkipped.existing, ...existing], inFile: [...importSkipped.inFile, ...inFile] };
+      pendingImport = [];
+      toast('Every row is already in the ledger — nothing was imported.');
+      return;
+    }
+    btn.textContent = `Adding ${fresh.length} bills…`;
+    setSaveStatus('saving', 'Saving…');
+    if(sb){
+      for(let i = 0; i < fresh.length; i += 500){          // in batches of 500
+        const chunk = fresh.slice(i, i + 500);
+        const { error } = await sb.from('bills').insert(chunk.map(billToRow));
+        if(error) throw error;
+        inserted.push(...chunk);
+      }
+    } else inserted.push(...fresh);
+    bills = bills.concat(inserted);                          // only now does the page show them: they are saved
+    const skippedTotal = importSkipped.existing.length + importSkipped.inFile.length + lateSkipped;
+    pendingImport = []; importSkipped = { existing: [], inFile: [] };
+    $('#importBox').value = ''; $('#parseInfo').textContent = ''; $('#mapInfo').textContent = '';
+    renderAll(); setSaveStatus('idle', 'Saved');
+    toast(`${inserted.length} bill${inserted.length===1?'':'s'} added.` + (skippedTotal ? ` ${skippedTotal} duplicate${skippedTotal===1?'':'s'} skipped.` : ''));
+  } catch(err){
+    console.error(err);
+    if(inserted.length){                                     // some batches did save: show them, keep the rest for a retry
+      bills = bills.concat(inserted);
+      const done = new Set(inserted.map(r => r.id));
+      pendingImport = pendingImport.filter(r => !done.has(r.id));
+      renderAll();
+    }
+    setSaveStatus('idle', 'Import failed');
+    toast(inserted.length
+      ? `Import stopped part-way: ${inserted.length} bills were saved, the rest were not. Press the button again to add the rest (duplicates are skipped automatically).`
+      : 'Import failed — nothing was added. Check your connection and try again.');
+  } finally {
+    importing = false;
+    renderPreview();
+  }
 });
 
 function escapeHtml(s){
@@ -1487,7 +1592,6 @@ function ensureAdminFilterBar(){
       <button class="btn ghost sm" id="adToday" type="button">Today</button>
       <button class="btn ghost sm" id="adClear" type="button">Clear filters</button>
       <button class="btn ghost sm" id="adRefresh" type="button">Refresh</button>
-      <button class="btn ghost sm" id="adExport" type="button">Download Excel</button>
     </div>` + dlxBarHtml();
   $('#deliveryTableWrap').before(bar);
   const rerender = () => { pageState.delivery = 0; renderDelivery(); };
@@ -1497,7 +1601,6 @@ function ensureAdminFilterBar(){
   $('#adToday').addEventListener('click', () => { adFilterDate = todayLocalISO(); $('#adDateFilter').value = adFilterDate; rerender(); });
   $('#adClear').addEventListener('click', () => { adFilterDate = ''; adFilterPartner = ''; dlxClear(); rerender(); });
   $('#adRefresh').addEventListener('click', refreshNow);
-  $('#adExport').addEventListener('click', exportDelivery);
 }
 function applyAdminDeliveryFilters(){
   // partner list = known partners + any name already on a bill (capitals/spaces ignored)
@@ -1611,7 +1714,6 @@ function ensureDpFilterBar(){
       <button class="btn ghost sm" id="dpToday" type="button">Today</button>
       <button class="btn ghost sm" id="dpAll" type="button">Show all</button>
       <button class="btn ghost sm" id="dpRefresh" type="button">Refresh</button>
-      <button class="btn ghost sm" id="dpExport" type="button">Download Excel</button>
     </div>` + dlxBarHtml();
   $('#deliveryTableWrap').before(bar);
   const apply = (v) => { dpFilterDate = v; $('#dpDateFilter').value = v; pageState.delivery = 0; renderDelivery(); };
@@ -1620,7 +1722,6 @@ function ensureDpFilterBar(){
   $('#dpToday').addEventListener('click', () => apply(todayLocalISO()));
   $('#dpAll').addEventListener('click', () => { dlxClear(); apply(''); });
   $('#dpRefresh').addEventListener('click', refreshNow);
-  $('#dpExport').addEventListener('click', exportDelivery);
 }
 function renderDeliveryPartnerView(){
   ensureDpFilterBar();
@@ -2128,7 +2229,7 @@ function renderAgent(){
   function renderPartnerDetail(name, pBills){
     const unverified = pBills.filter(b => !b.verified);
     const noDate = bills.filter(b => (b.deliveryPartner||'').trim() === name && !b.deliveryDate).length;
-    const body = pBills.map(b => `<tr>
+    const body = [...pBills].sort(cmpVoucherDesc).map(b => `<tr>
         <td>${escapeHtml(b.billNo)}</td><td>${escapeHtml(b.retailer)}</td>
         <td class="num mono">${fmtMoney(b.totalAmount)}</td>
         <td>${b.deliveryStatus ? `<span class="badge ${badgeClass(b.deliveryStatus)}">${escapeHtml(b.deliveryStatus)}</span>` : '<span class="footnote">not updated</span>'}</td>
@@ -2146,7 +2247,7 @@ function renderAgent(){
       : `<div class="footnote">No bills for ${escapeHtml(name)} on this date.</div>`;
     return `<tr><td colspan="9" style="background:#faf8f2; padding:12px 16px;">
       <div class="flex-between" style="margin-bottom:8px;">
-        <strong>${escapeHtml(name)} — bills for ${escapeHtml(selDate)}</strong>
+        <strong>${escapeHtml(name)} — bills for ${escapeHtml(selDate)}</strong> <span class="footnote">· sorted by voucher no., high to low</span>
         ${unverified.length ? `<button class="btn primary sm" data-verify-all="${escapeHtml(name)}">Verify all (${unverified.length})</button>` : (pBills.length ? '<span class="badge settled">All verified ✓</span>' : '')}
       </div>
       ${table}
@@ -2594,6 +2695,7 @@ function exportAgent(){
 $$('.save-all-btn').forEach(btn => btn.addEventListener('click', saveAllChanges));
 $$('.discard-btn').forEach(btn => btn.addEventListener('click', discardChanges));
 $('#saveStatus').addEventListener('click', () => { if(dirty.size) saveAllChanges(); });
+$('#deliveryExportBtn').addEventListener('click', exportDelivery);
 $('#signedExportBtn').addEventListener('click', exportSigned);
 $('#agentExportBtn').addEventListener('click', exportAgent);
 document.addEventListener('keydown', (e) => {

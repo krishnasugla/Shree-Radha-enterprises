@@ -57,8 +57,25 @@
     <p class="muted">Use the name exactly as it appears on bills (Delivery Partner, Sales Person or a collection visit's “Assigned To”). Whenever a bill or visit is assigned to that name, even before the login exists, it shows up in this person's login: Delivery Details for bills they deliver, Signed Bills for collection visits assigned to them. The Login ID is filled in from the name (you can change it): letters followed by exactly 4 digits.</p>
   </div>
 
+  <div class="panel" id="editPanel" hidden>
+    <h2>Edit login</h2>
+    <div class="grid">
+      <div><label for="eRole">Type</label>
+        <select id="eRole"><option value="delivery">Delivery partner</option><option value="sales">Sales person</option></select></div>
+      <div><label for="eName">Name (as used on bills)</label><input id="eName" autocomplete="off"></div>
+      <div><label for="eLoginId">Login ID (name + 4 digits)</label><input id="eLoginId" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button class="primary" id="eSaveBtn" type="button">Save changes</button>
+      <button id="eCancelBtn" type="button" style="margin-top:14px;">Cancel</button>
+    </div>
+    <div class="msg" id="editMsg" hidden></div>
+    <p class="muted">Bills are matched to a person by <strong>name</strong>, so use the name exactly as it appears on bills (for example “Sunil Garg”). If the old name is already on bills or collection visits, you'll be asked whether to move them to the new name too. The password is not changed here (use “Reset password”). If you change the Login ID, tell the person their new ID.</p>
+  </div>
+
   <div class="panel">
     <h2>Delivery partners &amp; sales persons</h2>
+    <div class="msg" id="listMsg" hidden></div>
     <div id="list" class="muted">Loading…</div>
   </div>
 </main>
@@ -83,6 +100,10 @@ async function manage(body){
   return data;
 }
 
+let people = [];      // the logins currently listed (used by Edit)
+let editing = null;   // the login being edited
+const norm = s => String(s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
 async function loadList(){
   const { data, error } = await sb.from('user_roles').select('user_id,name,login_id,email,role,active')
     .in('role',['delivery','sales']).order('name');
@@ -90,20 +111,23 @@ async function loadList(){
   if(error){ box.textContent = 'Could not load: ' + error.message; return; }
   if(!data.length){ box.textContent = 'No delivery partners yet.'; return; }
   box.className = '';
+  people = data;
   box.innerHTML = `<table><thead><tr><th>Name</th><th>Type</th><th>Login ID</th><th>Status</th><th></th></tr></thead><tbody>` +
     data.map(p => `<tr>
       <td>${esc(p.name)}</td><td>${p.role==='sales'?'Sales person':'Delivery partner'}</td><td class="mono">${esc(p.login_id || p.email)}</td>
       <td><span class="pill ${p.active?'on':'off'}">${p.active?'Active':'Deactivated'}</span></td>
       <td class="actions">
+        <button data-edit="${p.user_id}">Edit</button>
         <button data-reset="${p.user_id}">Reset password</button>
         <button data-toggle="${p.user_id}" data-active="${p.active}">${p.active?'Deactivate':'Activate'}</button>
       </td></tr>`).join('') + `</tbody></table>`;
 }
 
 $('#list').addEventListener('click', async (e) => {
-  const reset = e.target.dataset.reset, toggle = e.target.dataset.toggle;
+  const reset = e.target.dataset.reset, toggle = e.target.dataset.toggle, edit = e.target.dataset.edit;
   try {
-    if(reset){
+    if(edit){ openEdit(edit); }
+    else if(reset){
       const pw = prompt('New password for this person (min 8 characters):');
       if(!pw) return;
       await manage({ action:'reset_password', user_id: reset, password: pw });
@@ -115,6 +139,64 @@ $('#list').addEventListener('click', async (e) => {
       loadList();
     }
   } catch(err){ alert(err.message); }
+});
+
+function openEdit(id){
+  const p = people.find(x => x.user_id === id); if(!p) return;
+  editing = p;
+  $('#eRole').value = p.role; $('#eName').value = p.name || ''; $('#eLoginId').value = p.login_id || '';
+  $('#editMsg').hidden = true; $('#listMsg').hidden = true;
+  $('#editPanel').hidden = false;
+  $('#editPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+$('#eCancelBtn').addEventListener('click', () => { editing = null; $('#editPanel').hidden = true; });
+
+// RPC helpers (run with the admin's own login; the database only allows admins)
+async function nameUsage(name){
+  const { data, error } = await sb.rpc('staff_name_usage', { p_name: name });
+  if(error) throw new Error(error.message);
+  return (data && data[0]) || { delivery_count: 0, sales_count: 0, visit_count: 0 };
+}
+async function moveRecords(oldName, newName){
+  const { data, error } = await sb.rpc('rename_staff_records', { p_old: oldName, p_new: newName });
+  if(error) throw new Error(error.message);
+  return (data && data[0]) || { delivery_count: 0, sales_count: 0, visit_count: 0 };
+}
+
+$('#eSaveBtn').addEventListener('click', async () => {
+  if(!editing) return;
+  const msg = $('#editMsg'), btn = $('#eSaveBtn'), old = editing;
+  const name = $('#eName').value.trim().replace(/\s+/g, ' '), loginId = $('#eLoginId').value.trim().toLowerCase(), role = $('#eRole').value;
+  if(!name){ show(msg, 'Name is required.', false); return; }
+  if(!/^[a-z]+[0-9]{4}$/.test(loginId)){ show(msg, 'Login ID must be letters followed by exactly 4 digits, e.g. sunil1234.', false); return; }
+  if(name === (old.name || '') && loginId === (old.login_id || '') && role === old.role){ show(msg, 'Nothing was changed.', false); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await manage({ action: 'update', user_id: old.user_id, name, login_id: loginId, role });
+    let note = '';
+    if(norm(name) !== norm(old.name)){
+      // the old name may still be on bills / collection visits: offer to move them to the new name
+      let u = null;
+      try { u = await nameUsage(old.name); }
+      catch(e){ note = ` The login was saved, but I could not check the bills (${e.message}). Run the updated SQL file in Supabase, then edit again to move them.`; }
+      if(u){
+        const total = u.delivery_count + u.sales_count + u.visit_count;
+        if(total > 0){
+          const ok = confirm(`The login is saved as “${name}”.\n\n“${old.name}” is still used on ${u.delivery_count} bill(s) as Delivery Partner, ${u.sales_count} bill(s) as Sales Person and ${u.visit_count} collection visit(s) (Assigned To).\n\nMove them to “${name}” as well?\n\nOK = move them to the new name\nCancel = leave them as they are (they will not show in this person's login)`);
+          if(ok){
+            const r = await moveRecords(old.name, name);
+            note = ` Moved ${r.delivery_count} delivery, ${r.sales_count} sales-person and ${r.visit_count} collection-visit record(s) to “${name}”.`;
+          } else {
+            note = ` ${total} existing record(s) still use “${old.name}”.`;
+          }
+        } else note = ' No bills or visits used the old name.';
+      }
+    }
+    editing = null; $('#editPanel').hidden = true;
+    show($('#listMsg'), `Saved “${name}” (Login ID ${loginId}).${note}`, true);
+    loadList();
+  } catch(err){ show(msg, err.message, false); }
+  btn.disabled = false; btn.textContent = 'Save changes';
 });
 
 // Suggest a Login ID from the name: letters of the name + 4 random digits (editable)

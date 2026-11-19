@@ -766,6 +766,10 @@ async function loadData(){
     setSaveStatus('idle', 'Could not load — check Supabase connection');
     toast('Could not load from the database — check the browser console and your Supabase config.');
   }
+  if(isStaff() && enteredFor){          // the office may have renamed this login: keep the name used on screen in step with the database
+    const { data: me } = await sb.from('user_roles').select('name').eq('user_id', enteredFor).maybeSingle();
+    if(me && me.name && me.name !== partnerName){ partnerName = me.name; applyRoleUI(); }
+  }
   lastLoadAt = Date.now();
   renderAll();
   startRealtime();

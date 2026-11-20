@@ -1,0 +1,3086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — Shree Radhe Enterprises</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#182230;
+    --ink-soft:#4b5768;
+    --line:#dfdcd3;
+    --paper:#f6f4ee;
+    --panel:#ffffff;
+    --teal:#0e6b5e;
+    --teal-dark:#0a4f45;
+    --teal-tint:#e4efec;
+    --amber:#c98a2c;
+    --amber-tint:#faf0dc;
+    --brick:#a8402b;
+    --brick-tint:#f8e6e1;
+    --green:#3f8f5f;
+    --green-tint:#e6f2ea;
+    --radius:8px;
+    --shadow: 0 1px 2px rgba(24,34,48,.05), 0 4px 14px rgba(24,34,48,.05);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans',-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num, input[type=number], td.num, .mono{
+    font-family:'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  /* remove the native up/down spinner arrows on number inputs everywhere */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button{
+    -webkit-appearance:none; margin:0;
+  }
+  input[type=number]{ -moz-appearance:textfield; appearance:textfield; }
+  a{color:var(--teal);}
+
+  /* ---------- Header ---------- */
+  header.app{
+    background:var(--ink);
+    color:#f2efe6;
+    padding:18px 28px 0 28px;
+    position:sticky; top:0; z-index:40;
+  }
+  .app-top{
+    display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    padding-bottom:14px;
+  }
+  .brand{display:flex; align-items:baseline; gap:10px;}
+  .brand .mark{
+    width:10px;height:22px;background:var(--amber);display:inline-block;border-radius:2px;
+    transform: skewX(-12deg);
+  }
+  .brand h1{
+    font-size:17px; font-weight:600; letter-spacing:.2px; margin:0;
+  }
+  .brand .sub{color:#b9c2c9; font-size:12px; font-family:'IBM Plex Mono',monospace;}
+  .status-pill{
+    font-size:11px; font-family:'IBM Plex Mono',monospace; color:#b9c2c9;
+    display:flex; align-items:center; gap:6px;
+  }
+  .status-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+  .status-pill.saving .dot{background:var(--amber);}
+  .status-pill.unsaved{cursor:pointer;}
+  .status-pill.unsaved .dot{background:var(--amber);}
+  tr.dirty-row td{background:#fff4d6 !important;}
+
+  nav.tabs{
+    display:flex; gap:2px; overflow-x:auto;
+  }
+  nav.tabs button{
+    background:transparent; border:none; color:#c8cfd3; cursor:pointer;
+    padding:10px 16px; font-size:13px; font-family:'IBM Plex Sans'; font-weight:500;
+    border-bottom:2px solid transparent; white-space:nowrap;
+  }
+  nav.tabs button .n{
+    font-family:'IBM Plex Mono'; font-size:10px; opacity:.55; margin-right:6px;
+  }
+  nav.tabs button:hover{color:#fff;}
+  nav.tabs button.active{color:#fff; border-bottom-color:var(--amber);}
+
+  main{padding:24px 28px 60px 28px; max-width:1500px; margin:0 auto;}
+  .tabview{display:none;}
+  .tabview.active{display:block;}
+
+  h2.section-title{
+    font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft);
+    margin:28px 0 10px 0; font-weight:600;
+  }
+  h2.section-title:first-child{margin-top:0;}
+
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:20px;
+  }
+  .panel + .panel{margin-top:16px;}
+
+  .row{display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;}
+  label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); display:block; margin-bottom:5px;}
+  input, select, textarea{
+    font-family:'IBM Plex Sans'; font-size:13.5px; padding:8px 10px; border:1px solid var(--line);
+    border-radius:6px; background:#fff; color:var(--ink);
+  }
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--teal); outline-offset:0; border-color:var(--teal);}
+  textarea{font-family:'IBM Plex Mono'; font-size:12.5px; width:100%; resize:vertical;}
+
+  button.btn{
+    font-family:'IBM Plex Sans'; font-weight:600; font-size:13px; cursor:pointer;
+    border-radius:6px; padding:9px 16px; border:1px solid transparent;
+  }
+  button.btn.primary{background:var(--teal); color:#fff;}
+  button.btn.primary:hover{background:var(--teal-dark);}
+  button.btn.ghost{background:transparent; color:var(--ink); border-color:var(--line);}
+  button.btn.ghost:hover{background:#f1efe7;}
+  button.btn.danger{background:transparent; color:var(--brick); border-color:var(--brick);}
+  button.btn.danger:hover{background:var(--brick-tint);}
+  button.btn:disabled{opacity:.45; cursor:not-allowed;}
+  button.btn.sm{padding:5px 10px; font-size:12px;}
+
+  /* KPI cards */
+  .kpi-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;}
+  .kpi{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; box-shadow:var(--shadow);
+  }
+  .kpi .label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:6px;}
+  .kpi .value{font-family:'IBM Plex Mono'; font-size:22px; font-weight:600;}
+  .kpi.accent-teal .value{color:var(--teal-dark);}
+  .kpi.accent-amber .value{color:var(--amber);}
+  .kpi.accent-brick .value{color:var(--brick);}
+  .kpi.accent-green .value{color:var(--green);}
+  .kpi .sub{font-size:11px; color:var(--ink-soft); margin-top:4px;}
+
+  /* Tables */
+  .table-wrap{overflow:auto; border:1px solid var(--line); border-radius:var(--radius); background:#fff;}
+  table{border-collapse:collapse; width:100%; font-size:12.8px;}
+  thead th{
+    position:sticky; top:0; background:var(--ink); color:#eae7dd; text-align:left;
+    padding:9px 10px; font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+    white-space:nowrap; z-index:2;
+  }
+  tbody td{padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap;}
+  tbody tr:hover{background:#faf9f5;}
+  tbody tr:nth-child(even){background:#fcfbf8;}
+  tbody tr:nth-child(even):hover{background:#faf9f5;}
+  td.num, th.num{text-align:right;}
+  td input, td select{
+    border:1px solid transparent; background:transparent; padding:4px 6px; width:100%; font-size:12.5px; border-radius:4px;
+  }
+  td input:hover, td select:hover{border-color:var(--line);}
+  td input:focus, td select:focus{background:#fff; border-color:var(--teal);}
+
+  .badge{
+    display:inline-block; padding:2px 9px; border-radius:100px; font-size:11px; font-weight:600;
+  }
+  .badge.cash, .badge.settled{background:var(--green-tint); color:var(--green);}
+  .badge.signed, .badge.pending{background:var(--amber-tint); color:var(--amber);}
+  .badge.cancelled, .badge.outstanding{background:var(--brick-tint); color:var(--brick);}
+  .badge.part, .badge.partial{background:var(--teal-tint); color:var(--teal-dark);}
+  .badge.unknown{background:#eee; color:#888;}
+
+  .empty-state{
+    text-align:center; padding:60px 20px; color:var(--ink-soft);
+  }
+  .empty-state .big{font-size:15px; color:var(--ink); font-weight:600; margin-bottom:6px;}
+  .empty-state .mark2{width:32px;height:32px;margin:0 auto 16px auto;background:var(--amber);border-radius:8px;transform:skewX(-12deg);}
+
+  .helptext{font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:6px 0 14px 0;}
+  .footnote{font-size:11px; color:var(--ink-soft); margin-top:8px;}
+  .pager{display:flex; align-items:center; gap:10px; justify-content:flex-end; padding:10px 4px 0 4px; font-size:12px; color:var(--ink-soft);}
+  .flex-between{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  .toast{
+    position:fixed; bottom:20px; right:20px; background:var(--ink); color:#fff; padding:10px 16px;
+    border-radius:6px; font-size:13px; box-shadow:var(--shadow); z-index:100; opacity:0; transform:translateY(8px);
+    transition:opacity .2s, transform .2s; pointer-events:none;
+  }
+  .toast.show{opacity:1; transform:translateY(0);}
+  .dup-warn{color:var(--brick); font-size:12px; margin-top:6px;}
+
+  td.fill-col{position:relative;}
+  .fillwrap{position:relative; display:block; width:100%;}
+  .fillwrap input, .fillwrap select{width:100%;}
+  .fill-handle{
+    position:absolute; right:-3px; bottom:-3px; width:9px; height:9px; background:var(--teal);
+    border:1.5px solid #fff; box-shadow:0 0 0 1px var(--teal); cursor:crosshair; z-index:3; display:none;
+  }
+  .fillwrap:hover .fill-handle, .combo:hover .fill-handle{display:block;}
+  tr.fill-target td.fill-col{background:var(--teal-tint) !important; outline:1px dashed var(--teal); outline-offset:-1px;}
+
+  .visit-toggle{display:flex; flex-direction:column; align-items:flex-start; gap:2px;}
+  .visit-summary{font-size:12px;}
+  .visit-summary .cnt{font-weight:600; color:var(--ink);}
+  .visit-summary .last{color:var(--ink-soft); font-size:11px;}
+  .visit-summary .none{color:var(--ink-soft); font-style:italic;}
+  tr.visit-log-row td{background:#faf9f5; padding:14px 18px; white-space:normal;}
+  tr.visit-log-row:hover{background:#faf9f5;}
+  table.visit-table{width:100%; border-collapse:collapse; margin-bottom:12px; background:#fff; border:1px solid var(--line); border-radius:6px; overflow:hidden;}
+  table.visit-table th{font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); background:#f6f4ee;}
+  table.visit-table td{padding:6px 10px; font-size:12.5px; border-bottom:1px solid var(--line); white-space:nowrap;}
+  table.visit-table tr:last-child td{border-bottom:none;}
+  .visit-empty-note{font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;}
+  .visit-add-form{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;}
+  .visit-add-form label{margin-bottom:4px;}
+  .visit-add-form > div{min-width:120px;}
+
+  .auth-gate{
+    position:fixed; inset:0; z-index:200; display:none;
+    background:radial-gradient(ellipse at top left, #16212f 0%, #0b1420 55%), var(--ink);
+    color:#f2efe6; overflow:hidden;
+    align-items:center; justify-content:center; flex-direction:column;
+    padding:24px;
+  }
+  .auth-bg{position:absolute; inset:0; z-index:0; overflow:hidden;}
+  .auth-glow{position:absolute; border-radius:50%; filter:blur(90px); opacity:.32; animation:authDrift 16s ease-in-out infinite;}
+  .auth-glow-amber{width:440px; height:440px; background:#EF9F27; top:-140px; left:-100px;}
+  .auth-glow-teal{width:520px; height:520px; background:#1D9E75; bottom:-160px; right:-120px; animation-delay:-7s; animation-duration:19s;}
+  @keyframes authDrift{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(36px,-26px) scale(1.06);}}
+
+  .auth-flow{position:absolute; inset:0; width:100%; height:100%; z-index:1;}
+  .flow-path{fill:none; stroke-width:1.4; stroke-dasharray:9 9; animation:flowMove 7s linear infinite;}
+  .flow-path-a{stroke:rgba(29,158,117,.4); animation-duration:7s;}
+  .flow-path-b{stroke:rgba(239,159,39,.32); animation-duration:9.5s; animation-direction:reverse;}
+  .flow-path-c{stroke:rgba(29,158,117,.24); animation-duration:12s;}
+  @keyframes flowMove{to{stroke-dashoffset:-180;}}
+  .flow-dot{animation:travel linear infinite;}
+  @keyframes travel{from{offset-distance:0%; opacity:0;} 5%{opacity:1;} 95%{opacity:1;} to{offset-distance:100%; opacity:0;}}
+  @media (prefers-reduced-motion: reduce){
+    .auth-glow, .flow-path, .flow-dot{animation:none;}
+  }
+
+  .auth-card{
+    position:relative; z-index:2;
+    background:rgba(28,38,51,.82); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.08); border-radius:16px;
+    padding:40px 36px; width:100%; max-width:380px;
+    box-shadow:0 24px 70px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.02) inset;
+    animation:authCardIn .55s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes authCardIn{from{opacity:0; transform:translateY(16px) scale(.98);} to{opacity:1; transform:translateY(0) scale(1);}}
+  .auth-brand{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  .auth-brand h1{font-size:17px; font-weight:600; margin:0;}
+  .auth-sub{color:#9aa4ae; font-size:12.5px; font-family:'IBM Plex Mono'; margin-bottom:26px;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#9aa4ae; display:block; margin-bottom:6px;}
+  .auth-field input{
+    width:100%; padding:10px 12px; border-radius:6px; border:1px solid #3a4658;
+    background:rgba(20,28,39,.8); color:#f2efe6; font-size:14px; font-family:'IBM Plex Sans';
+    transition:border-color .15s, background .15s;
+  }
+  .auth-field input:focus{outline:2px solid var(--amber); outline-offset:0; border-color:var(--amber); background:#141c27;}
+  .auth-submit{
+    width:100%; margin-top:6px; background:var(--amber); color:#412402; border:none;
+    font-weight:600; font-size:14px; padding:11px; border-radius:6px; cursor:pointer;
+    transition:background .15s, transform .1s;
+  }
+  .auth-submit:hover{background:#dca03e;}
+  .auth-submit:active{transform:scale(.98);}
+  .auth-submit:disabled{opacity:.6; cursor:not-allowed;}
+  .auth-error{
+    margin-top:12px; font-size:12.5px; color:#ffb4a8; background:rgba(232,89,60,.12);
+    border:1px solid rgba(232,89,60,.35); padding:8px 10px; border-radius:6px;
+  }
+
+
+  .combo{position:relative;}
+  .combo-input{width:100%; min-width:112px;}
+  .combo-input.invalid{border-color:var(--brick) !important; background:var(--brick-tint);}
+  .combo-list{
+    position:absolute; top:calc(100% + 2px); left:0; z-index:50; background:#fff; border:1px solid var(--line);
+    border-radius:6px; box-shadow:var(--shadow); max-height:170px; overflow-y:auto; min-width:150px;
+  }
+  .combo-opt{padding:6px 11px; font-size:12.5px; cursor:pointer; white-space:nowrap;}
+  .combo-opt:hover, .combo-opt.hi{background:var(--teal-tint); color:var(--teal-dark);}
+  .combo-empty{padding:6px 11px; font-size:12px; color:var(--ink-soft); white-space:nowrap;}
+
+  .dropzone{
+    border:2px dashed var(--line); border-radius:var(--radius); padding:34px 20px;
+    text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+    background:#fcfbf8;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--teal); background:var(--teal-tint);}
+  .dropzone .icon{
+    width:38px;height:38px;margin:0 auto 12px auto;border-radius:9px;background:var(--ink);
+    display:flex;align-items:center;justify-content:center;color:#f2efe6;font-family:'IBM Plex Mono';font-size:11px;font-weight:600;
+  }
+  .dropzone .title{font-weight:600; font-size:14px; margin-bottom:4px;}
+  .dropzone .sub{font-size:12px; color:var(--ink-soft);}
+  .dropzone input[type=file]{display:none;}
+  .file-chip{
+    display:inline-flex; align-items:center; gap:8px; background:var(--teal-tint); color:var(--teal-dark);
+    padding:6px 12px; border-radius:100px; font-size:12.5px; font-weight:600; font-family:'IBM Plex Mono';
+  }
+  .file-chip button{background:none;border:none;color:var(--teal-dark);cursor:pointer;font-size:14px;line-height:1;padding:0;}
+  .map-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:14px;}
+  .map-section-label{grid-column:1/-1; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-top:4px;}
+  .map-field label{margin-bottom:4px;}
+  .map-field select{width:100%;}
+  details.manual-import{margin-top:18px;}
+  details.manual-import summary{cursor:pointer; font-size:12.5px; color:var(--teal); font-weight:600; user-select:none;}
+  details.manual-import[open] summary{margin-bottom:12px;}
+  .sheet-picker{margin-top:10px;}
+  ::-webkit-scrollbar{height:10px; width:10px;}
+  ::-webkit-scrollbar-thumb{background:#d7d3c6; border-radius:6px;}
+</style>
+</head>
+<body>
+
+<div class="auth-gate" id="authGate">
+  <div class="auth-bg" aria-hidden="true">
+    <div class="auth-glow auth-glow-amber"></div>
+    <div class="auth-glow auth-glow-teal"></div>
+    <svg class="auth-flow" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+      <path class="flow-path flow-path-a" d="M-50,430 C150,360 300,480 500,360 S760,290 900,340"/>
+      <path class="flow-path flow-path-b" d="M-50,170 C200,250 350,110 550,210 S800,140 900,170"/>
+      <path class="flow-path flow-path-c" d="M-50,300 C180,240 400,340 600,260 S850,200 900,240"/>
+      <circle class="flow-dot" r="4" fill="#EF9F27" style="offset-path:path('M-50,430 C150,360 300,480 500,360 S760,290 900,340'); animation-duration:6.5s;"/>
+      <circle class="flow-dot" r="4" fill="#1D9E75" style="offset-path:path('M-50,170 C200,250 350,110 550,210 S800,140 900,170'); animation-duration:8.5s; animation-delay:-2s;"/>
+      <circle class="flow-dot" r="3.5" fill="#EF9F27" style="offset-path:path('M-50,300 C180,240 400,340 600,260 S850,200 900,240'); animation-duration:10.5s; animation-delay:-5s;"/>
+      <circle class="flow-dot" r="4" fill="#1D9E75" style="offset-path:path('M-50,430 C150,360 300,480 500,360 S760,290 900,340'); animation-duration:6.5s; animation-delay:-3.2s;"/>
+      <circle class="flow-dot" r="3.5" fill="#1D9E75" style="offset-path:path('M-50,170 C200,250 350,110 550,210 S800,140 900,170'); animation-duration:8.5s; animation-delay:-6s;"/>
+    </svg>
+  </div>
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="mark"></span>
+      <h1>Shree Radhe Enterprises</h1>
+    </div>
+    <div class="auth-sub">Sign in to the ledger</div>
+    <form id="loginForm">
+      <div class="auth-field">
+        <label>Login ID or email</label>
+        <input type="text" id="loginEmail" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="auth-submit">Sign in</button>
+      <div class="auth-error" id="loginError" hidden></div>
+    </form>
+  </div>
+</div>
+
+<header class="app">
+  <div class="app-top">
+    <div class="brand">
+      <span class="mark"></span>
+      <div>
+        <h1>Shree Radhe Enterprises</h1>
+        <div class="sub">Delivery &amp; Collection Ledger</div>
+      </div>
+    </div>
+    <div class="status-pill" id="saveStatus"><span class="dot"></span><span id="saveStatusText">Loaded</span></div>
+    <button class="btn ghost sm" id="backupBtn" style="border-color:#3a4658; color:#c8cfd3;">Download backup</button>
+    <button class="btn ghost sm" id="logoutBtn" style="border-color:#3a4658; color:#c8cfd3;">Log out</button>
+  </div>
+  <nav class="tabs" id="tabNav">
+    <button data-tab="import" class="active"><span class="n">01</span>Sales Register Import</button>
+    <button data-tab="delivery"><span class="n">02</span>Delivery Details</button>
+    <button data-tab="signed"><span class="n">03</span>Signed Bills</button>
+    <button data-tab="agent"><span class="n">04</span>Daily Agent Report</button>
+    <button data-tab="settlement"><span class="n">05</span>Settlement Summary</button>
+    <button data-tab="cash"><span class="n">06</span>Cash Collection by Date</button>
+    
+    <!-- Updated Admin Link -->
+    <button onclick="window.location.href='admin.html';"><span class="n">07</span>Admin Dashboard</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ============ TAB 1: IMPORT ============ -->
+  <section class="tabview active" id="tab-import">
+    <h2 class="section-title">Step 1 — Bring in your sales register</h2>
+    <div class="panel">
+      <p class="helptext">
+        Upload your Busy software export as-is — <strong>.xlsx, .xls or .csv</strong>. You only need the five columns Company, Date, Vch/Bill No, Retailer, Total Amount somewhere in the file; the sheet doesn't need to match exactly, you'll confirm the column mapping below before anything is added.
+      </p>
+      <div class="dropzone" id="dropzone">
+        <div class="icon">XLS</div>
+        <div class="title">Drop your Excel file here, or click to browse</div>
+        <div class="sub">.xlsx · .xls · .csv — nothing is uploaded anywhere, it's read directly in your browser</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+      </div>
+      <div id="fileChipRow" style="margin-top:12px; display:none;">
+        <span class="file-chip" id="fileChip"></span>
+      </div>
+
+      <div id="sheetPickerRow" class="sheet-picker" style="display:none;">
+        <label>Sheet in this workbook</label>
+        <select id="sheetPicker"></select>
+      </div>
+
+      <div id="mappingBox" style="display:none;">
+        <h2 class="section-title">Confirm which column is which</h2>
+        <p class="helptext" style="margin-top:-4px;">Guessed automatically from your headers — check each one, especially if your export has extra columns before these five.</p>
+        <div class="map-grid" id="mapGrid"></div>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn primary" id="buildPreviewBtn">Preview import</button>
+          <button class="btn ghost" id="cancelFileBtn">Start over</button>
+          <span class="footnote" id="mapInfo"></span>
+        </div>
+      </div>
+
+      <details class="manual-import">
+        <summary>Prefer to paste instead of uploading a file?</summary>
+        <p class="helptext">Copy the five columns — Company, Date, Vch/Bill No, Retailer, Total Amount — straight out of Excel and paste below.</p>
+        <textarea id="importBox" rows="6" placeholder="Company&#9;Date&#9;Vch/Bill No&#9;Retailer&#9;Total Amount
+Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn primary" id="parseBtn">Preview import</button>
+          <button class="btn ghost" id="clearBoxBtn">Clear box</button>
+          <span class="footnote" id="parseInfo"></span>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel" id="previewPanel" style="display:none; margin-top:16px;">
+      <div class="flex-between">
+        <h2 class="section-title" style="margin:0;">Preview</h2>
+        <div class="row">
+          <button class="btn primary" id="commitBtn">Add these bills to the ledger</button>
+          <button class="btn ghost" id="cancelPreviewBtn">Discard</button>
+        </div>
+      </div>
+      <div id="dupWarnBox"></div>
+      <div class="table-wrap" style="margin-top:10px; max-height:420px;">
+        <table>
+          <thead id="previewHead"><tr><th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th></tr></thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="flex-between">
+        <h2 class="section-title" style="margin:0;">All bills currently in the ledger</h2>
+        <span class="footnote" id="totalCountText"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB 2: DELIVERY DETAILS ============ -->
+  <section class="tabview" id="tab-delivery">
+    <div class="flex-between">
+      <h2 class="section-title" style="margin:0;">Fill in delivery &amp; collection info for each bill</h2>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="footnote" id="deliveryCount"></span>
+        <button class="btn ghost" id="deliveryExportBtn" type="button">⬇ Download Excel</button>
+        <button class="btn ghost sm discard-btn" type="button" hidden>Discard</button>
+        <button class="btn primary save-all-btn" type="button" disabled>Save changes</button>
+      </div>
+    </div>
+    <p class="footnote" style="margin:4px 0 8px;">Edits stay on this page until you press <strong>Save changes</strong> (or Ctrl + S) — then everything is saved in one go.</p>
+    <p class="helptext">Every bill you imported shows up here. Fill in the yellow-style fields — Delivery Date, Area, Sales Person, Delivery Partner, Delivery Status, Amount Collected, Comments, Discount. Mark a bill <strong>Signed</strong> if the retailer received it but hasn't paid yet — it'll automatically show up in the Signed Bills tab.</p>
+    <div class="table-wrap" id="deliveryTableWrap"></div>
+    <div class="pager" id="deliveryPager"></div>
+  </section>
+
+  <!-- ============ TAB 3: SIGNED BILLS ============ -->
+  <section class="tabview" id="tab-signed">
+    <div class="flex-between">
+      <h2 class="section-title" style="margin:0;">Bills signed for, payment still pending</h2>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="footnote" id="signedCount"></span>
+        <button class="btn ghost" id="signedExportBtn" type="button">⬇ Download Excel</button>
+        <button class="btn ghost sm discard-btn" type="button" hidden>Discard</button>
+        <button class="btn primary save-all-btn" type="button" disabled>Save changes</button>
+      </div>
+    </div>
+    <p class="footnote" style="margin:4px 0 8px;">Edits stay on this page until you press <strong>Save changes</strong> (or Ctrl + S) — then everything is saved in one go.</p>
+    <p class="helptext">Pulled automatically from Delivery Details where Delivery Status = Signed. Click "Collection Visits" on any bill to log every follow-up attempt — as many as it actually takes — with who went, what happened, and how much came in. Total Collected and Balance Outstanding add up automatically across all of them. Retailer, Date and Area / Beat can be filled in or corrected right in the table (all optional).</p>
+
+    <details class="panel" id="signedLoader" style="padding:14px 16px;">
+      <summary style="cursor:pointer; font-weight:600; color:var(--teal);">Load signed bills from a list</summary>
+      <p class="helptext" style="margin-top:10px;">
+        Upload or paste four columns: <strong>Company, Signed Bill No, Sales Person, Amount Outstanding</strong>. Each bill is added as <strong>Signed</strong>, with the outstanding amount as its bill amount, and assigned to that sales person (it appears in their login, where they can log visits). Retailer, Date and Area / Beat are left empty; fill them in later in the table below. If a bill number is already in the ledger you get an alert and that row is skipped unless you tick it.
+      </p>
+      <div class="dropzone" id="slDropzone">
+        <div class="icon">XLS</div>
+        <div class="title">Drop your Excel file here, or click to browse</div>
+        <div class="sub">.xlsx · .xls · .csv — read directly in your browser</div>
+        <input type="file" id="slFile" accept=".xlsx,.xls,.csv">
+      </div>
+      <div id="slSheetRow" class="sheet-picker" style="display:none;">
+        <label>Sheet in this workbook</label>
+        <select id="slSheet"></select>
+      </div>
+      <div id="slMapBox" style="display:none;">
+        <p class="helptext" style="margin:14px 0 0;">Check which column is which:</p>
+        <div class="map-grid" id="slMapGrid"></div>
+        <div class="row" style="margin-top:14px;">
+          <button class="btn primary" id="slPreviewBtn" type="button">Preview</button>
+          <button class="btn ghost" id="slResetBtn" type="button">Start over</button>
+        </div>
+      </div>
+      <details class="manual-import">
+        <summary>Prefer to paste instead of uploading a file?</summary>
+        <p class="helptext">Copy the four columns — Company, Signed Bill No, Sales Person, Amount Outstanding — straight out of Excel and paste below.</p>
+        <textarea id="slPaste" rows="5" placeholder="Company&#9;Signed Bill No&#9;Sales Person&#9;Amount Outstanding
+Bajaj&#9;2042&#9;Sunil Garg&#9;5887"></textarea>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn primary" id="slParseBtn" type="button">Preview</button>
+          <button class="btn ghost" id="slClearBtn" type="button">Clear box</button>
+        </div>
+      </details>
+      <div id="slPreview" style="display:none; margin-top:16px;">
+        <div class="flex-between">
+          <h2 class="section-title" style="margin:0;">Preview</h2>
+          <div class="row">
+            <button class="btn primary" id="slCommitBtn" type="button">Load signed bills</button>
+            <button class="btn ghost" id="slDiscardBtn" type="button">Discard</button>
+          </div>
+        </div>
+        <div id="slSummary" class="footnote" style="margin-top:8px;"></div>
+        <div id="slWarn"></div>
+        <div class="table-wrap" style="margin-top:10px; max-height:420px;">
+          <table>
+            <thead><tr><th>Load?</th><th>Company</th><th>Signed Bill No</th><th>Sales Person</th><th class="num">Amount Outstanding</th><th>Check</th></tr></thead>
+            <tbody id="slBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+
+    <div class="panel" style="padding:14px 16px;">
+      <div class="row" id="signedFilterBar">
+        <div>
+          <label>Bill number</label>
+          <input type="text" id="f-billNo" placeholder="e.g. 3584" autocomplete="off" style="width:130px;">
+        </div>
+        <div>
+          <label>Balance Outstanding</label>
+          <select id="f-balance">
+            <option value="">All</option>
+            <option value="pending">Not Fully Collected</option>
+            <option value="full">Fully Collected</option>
+          </select>
+        </div>
+        <div>
+          <label>Company</label>
+          <select id="f-company"><option value="">All companies</option></select>
+        </div>
+        <div>
+          <label>Area</label>
+          <select id="f-area"><option value="">All areas</option></select>
+        </div>
+        <div>
+          <label>Sales Person</label>
+          <select id="f-salesPerson"><option value="">All sales persons</option></select>
+        </div>
+        <div>
+          <label>Date — from</label>
+          <input type="date" id="f-dateFrom">
+        </div>
+        <div>
+          <label>Date — to</label>
+          <input type="date" id="f-dateTo">
+        </div>
+        <div>
+          <button class="btn ghost" id="f-clear">Clear filters</button>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="table-wrap" id="signedTableWrap"></div>
+    <div class="pager" id="signedPager"></div>
+  </section>
+
+  <!-- ============ TAB 4: DAILY AGENT REPORT ============ -->
+  <section class="tabview" id="tab-agent">
+    <h2 class="section-title">Pick a date</h2>
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label>Delivery date</label>
+          <input type="date" id="agentDateInput">
+        </div>
+        <span class="footnote" id="agentDateHint" style="align-self:center;"></span>
+        <button class="btn ghost sm" id="agentRefreshBtn" type="button" style="align-self:center;">Refresh</button>
+        <button class="btn ghost sm" id="agentExportBtn" type="button" style="align-self:center;">Download Excel</button>
+      </div>
+    </div>
+
+    <h2 class="section-title">By Delivery Partner</h2>
+    <div class="table-wrap" id="agentPartnerWrap"></div>
+
+    <h2 class="section-title">By Sales Person</h2>
+    <div class="table-wrap" id="agentSalesWrap"></div>
+  </section>
+
+  <!-- ============ TAB 5: SETTLEMENT SUMMARY ============ -->
+  <section class="tabview" id="tab-settlement">
+    <h2 class="section-title">Overall settlement snapshot</h2>
+    <div class="kpi-grid" id="settlementKpis"></div>
+
+    <h2 class="section-title">Breakdown by delivery partner</h2>
+    <div class="table-wrap" id="settlementPartnerWrap"></div>
+
+    <h2 class="section-title">Merged bill-by-bill settlement register</h2>
+    <div class="table-wrap" id="settlementRegisterWrap"></div>
+    <div class="pager" id="settlementPager"></div>
+  </section>
+
+  <!-- ============ TAB 6: CASH COLLECTION BY DATE ============ -->
+  <section class="tabview" id="tab-cash">
+    <h2 class="section-title">Cash &amp; Bank/UPI Collected, by Date</h2>
+    <p class="helptext">Combines bills marked Cash or UPI/Bank (by delivery date) with Signed bills' collection visits logged as Collected— Cash or Collected— Bank (by visit date). Signed-but-pending amounts are excluded — this is money actually in hand, split by how it came in.</p>
+    <div class="table-wrap" id="cashTableWrap"></div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   DATA MODEL
+   Each bill:
+   { id, company, date, billNo, retailer, totalAmount,
+     deliveryDate, area, salesPerson, deliveryPartner, deliveryStatus,
+     amountAtDelivery, comments, discount,
+     nextVisitPlanned,          // single date — when someone plans to go back next
+     visits: [ { id, date, assignedTo, status, amount, notes } ]  // open-ended
+     collection-attempt log — one bill can have as many follow-up visits as it
+     actually took, instead of a fixed number of "round" columns.
+   }
+   ========================================================================= */
+
+let bills = [];
+let userRole = null, partnerName = '', enteredFor = null;   // set after login from the user_roles table
+const isStaff = () => userRole === 'delivery' || userRole === 'sales';   // delivery partners and sales persons
+const sameName = (a, b) => (a||'').trim().toLowerCase() === (b||'').trim().toLowerCase();   // capitals/spaces ignored, like the database
+const hasMyVisit = b => (b.visits||[]).some(v => sameName(v.assignedTo, partnerName));
+let deliveryRowOrder = [];
+let fillDrag = null;
+let expandedSignedIds = new Set();
+
+const STATUS_OPTIONS = ["", "Signed", "Cash", "UPI/Bank", "Cheque", "Cancelled", "Part Delivered"];
+const COLLECTION_STATUS_OPTIONS = ["", "Not Collected", "Collected- Cash", "Collected- Bank"];
+const SALES_PERSON_OPTIONS = ["Aditya", "Anuj", "Aryan", "Aushotosh Pandey", "Deepak G", "Durgesh", "Nishant Tomar", "Puneet", "Pursotam", "Rahul", "Rajkumar", "Sanjay", "Shravan", "Sourav Dhaka", "Sunil Garg", "Vinay"];
+const DELIVERY_PARTNER_OPTIONS = ["Mukesh", "Suraj", "Mohit", "Ritik", "Amit"];
+const ASSIGNED_FOR_OPTIONS = [...SALES_PERSON_OPTIONS, ...DELIVERY_PARTNER_OPTIONS];
+
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function uid(){ return 'b' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+function fmtMoney(n){
+  if(n === null || n === undefined || isNaN(n)) return '';
+  const neg = n < 0;
+  n = Math.abs(Math.round(n));
+  let s = n.toLocaleString('en-IN');
+  return (neg ? '(' : '') + '₹' + s + (neg ? ')' : '');
+}
+function toNum(v){
+  if(v === null || v === undefined || v === '') return 0;
+  if(typeof v === 'number') return isNaN(v) ? 0 : v;
+  // strip currency symbols, thousands separators, and whitespace before parsing,
+  // so "12,000" or "₹1,234.50" parse correctly instead of parseFloat silently
+  // truncating at the first comma (parseFloat('12,000') would otherwise be 12).
+  const cleaned = String(v).replace(/[₹,\s]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+function parseDateLoose(v){
+  if(!v) return '';
+  if(v instanceof Date && !isNaN(v.getTime())){
+    const y = v.getUTCFullYear(), m = String(v.getUTCMonth()+1).padStart(2,'0'), d = String(v.getUTCDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  v = String(v).trim();
+  // already yyyy-mm-dd
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  // dd/mm/yyyy or dd-mm-yyyy
+  let m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){
+    let [_, d, mo, y] = m;
+    if(y.length===2) y = '20'+y;
+    return `${y.padStart(4,'0')}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  // Excel serial date number
+  if(/^\d+(\.\d+)?$/.test(v)){
+    const serial = parseFloat(v);
+    const epoch = new Date(Date.UTC(1899,11,30));
+    const d = new Date(epoch.getTime() + serial*86400000);
+    return d.toISOString().slice(0,10);
+  }
+  const d = new Date(v);
+  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  return '';
+}
+
+/* ---------------- persistence: Supabase (Postgres) ----------------
+   Two tables, not one JSON blob — bills and visits, one row each.
+   That matters for real multi-person use: if two people edit different
+   bills at the same time, they upsert different rows, not the same blob.
+
+   REQUIRED SETUP — fill these in after creating your Supabase project
+   (Project Settings → API): */
+const SUPABASE_URL = 'https://dakwwhbswakyorffpiom.supabase.co';       // e.g. https://xxxxxxxx.supabase.co
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRha3d3aGJzd2FreW9yZmZwaW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0OTg3NDIsImV4cCI6MjEwMzA3NDc0Mn0.TF0CfVqNqdeqY-WiKQdjm5-QvtzOvGVRfYOSFrAlsbs';
+const sb = (SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY.length > 20)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+/* ---- row <-> in-memory object mapping (DB is snake_case, JS is camelCase) ---- */
+function n2s(v){ return (v===undefined||v===null||v==='') ? null : v; }         // empty -> null, for date/text columns
+function n2n(v){ return (v===undefined||v===null||v==='') ? null : toNum(v); }  // empty -> null, for numeric columns
+
+function billToRow(b){
+  return {
+    id: b.id, company: n2s(b.company), date: n2s(b.date), bill_no: n2s(b.billNo), retailer: n2s(b.retailer),
+    total_amount: toNum(b.totalAmount) || 0, delivery_date: n2s(b.deliveryDate), area: n2s(b.area),
+    sales_person: n2s(b.salesPerson), delivery_partner: n2s(b.deliveryPartner), delivery_status: n2s(b.deliveryStatus),
+    amount_at_delivery: n2n(b.amountAtDelivery), comments: n2s(b.comments), discount: n2n(b.discount),
+    next_visit_planned: n2s(b.nextVisitPlanned)
+  };
+}
+function rowToBill(r){
+  return {
+    id: r.id, company: r.company||'', date: r.date||'', billNo: r.bill_no||'', retailer: r.retailer||'',
+    totalAmount: r.total_amount==null?0:Number(r.total_amount), deliveryDate: r.delivery_date||'', area: r.area||'',
+    salesPerson: r.sales_person||'', deliveryPartner: r.delivery_partner||'', deliveryStatus: r.delivery_status||'',
+    amountAtDelivery: r.amount_at_delivery==null?'':Number(r.amount_at_delivery), comments: r.comments||'',
+    discount: r.discount==null?'':Number(r.discount), nextVisitPlanned: r.next_visit_planned||'', verified: !!r.verified, visits: [],
+    _snap: { delivery_date: r.delivery_date ?? null, delivery_status: r.delivery_status ?? null,
+             amount_at_delivery: r.amount_at_delivery == null ? null : Number(r.amount_at_delivery),
+             comments: r.comments ?? null, next_visit_planned: r.next_visit_planned ?? null,
+             retailer: r.retailer ?? null, date: r.date ?? null, area: r.area ?? null }
+  };
+}
+function visitToRow(v, billId){
+  return {
+    id: v.id, bill_id: billId, date: n2s(v.date), assigned_to: n2s(v.assignedTo),
+    status: n2s(v.status), amount: toNum(v.amount) || 0, notes: n2s(v.notes)
+  };
+}
+function rowToVisit(r){
+  return { id: r.id, date: r.date||'', assignedTo: r.assigned_to||'', status: r.status||'', amount: r.amount==null?0:Number(r.amount), notes: r.notes||'' };
+}
+
+/* Admin: keep the dropdowns in sync with real staff accounts. Anyone with a login can be a
+   delivery partner or be assigned a collection visit; sales persons also join the Sales Person list. */
+async function loadPartnerNames(){
+  const { data } = await sb.from('user_roles').select('name,role').in('role', ['delivery','sales']).eq('active', true);
+  const addTo = (arr, n) => { if(n && !arr.some(x => sameName(x, n))) arr.push(n); };
+  (data||[]).forEach(r => {
+    addTo(DELIVERY_PARTNER_OPTIONS, r.name);
+    addTo(ASSIGNED_FOR_OPTIONS, r.name);
+    if(r.role === 'sales') addTo(SALES_PERSON_OPTIONS, r.name);
+  });
+}
+/* Who can be picked as a bill's Delivery Partner: delivery partners AND sales persons (they deliver sometimes) */
+function deliveryPickOptions(){
+  const out = [];
+  [...DELIVERY_PARTNER_OPTIONS, ...SALES_PERSON_OPTIONS].forEach(n => { if(!out.some(x => sameName(x, n))) out.push(n); });
+  return out;
+}
+
+/* Supabase returns at most 1000 rows per request. Read page by page until a page comes back
+   empty, otherwise everything beyond the first 1000 bills silently never shows up. */
+async function fetchAll(table){
+  const PAGE = 1000, out = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await sb.from(table).select('*').order('id', { ascending: true }).range(from, from + PAGE - 1);
+    if(error) return { data: null, error };
+    if(!data.length) return { data: out, error: null };
+    out.push(...data);
+    from += data.length;
+  }
+}
+
+let loadSeq = 0;
+async function loadData(){
+  if(dirty.size) return;   // never overwrite unsaved edits (Refresh / Discard clear them first, on purpose)
+  const mySeq = ++loadSeq;
+  // let any edit that is still waiting to be saved reach the database first
+  for(let i = 0; i < 20 && Object.keys(savePending).length; i++) await new Promise(r => setTimeout(r, 100));
+  setSaveStatus('loading', 'Loading…');
+  if(!sb){
+    bills = [];
+    setSaveStatus('idle', 'Not connected — add your Supabase URL/key in the code');
+    toast('Supabase isn\'t configured yet — edit SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
+    renderAll();
+    return;
+  }
+  try{
+    const [billsRes, visitsRes] = await Promise.all([ fetchAll('bills'), fetchAll('visits') ]);
+    if(mySeq !== loadSeq) return;   // a newer load has started; let that one win
+    if(billsRes.error) throw billsRes.error;
+    if(visitsRes.error) throw visitsRes.error;
+    if(userRole === 'admin') await loadPartnerNames();
+    const visitsByBill = {};
+    (visitsRes.data||[]).forEach(vr => {
+      (visitsByBill[vr.bill_id] = visitsByBill[vr.bill_id] || []).push(rowToVisit(vr));
+    });
+    bills = (billsRes.data||[]).map(br => {
+      const b = rowToBill(br);
+      b.visits = visitsByBill[br.id] || [];
+      return b;
+    });
+    setSaveStatus('idle', bills.length ? `${bills.length} bills loaded` : 'No data yet');
+  }catch(e){
+    console.error(e);
+    bills = [];
+    setSaveStatus('idle', 'Could not load — check Supabase connection');
+    toast('Could not load from the database — check the browser console and your Supabase config.');
+  }
+  if(isStaff() && enteredFor){          // the office may have renamed this login: keep the name used on screen in step with the database
+    const { data: me } = await sb.from('user_roles').select('name').eq('user_id', enteredFor).maybeSingle();
+    if(me && me.name && me.name !== partnerName){ partnerName = me.name; applyRoleUI(); }
+  }
+  lastLoadAt = Date.now();
+  renderAll();
+  startRealtime();
+}
+
+/* ---- live updates (Supabase Realtime) ----
+   Changes made by other people (a partner finishing a delivery, the office assigning a bill) arrive as
+   small events and are merged in place. Rules that keep typing safe:
+   - never redraw while someone is typing in a field (redraw as soon as they leave it)
+   - ignore the echo of your own saves and events identical to what is already on screen
+   - never overwrite a row that has an unsaved local edit */
+let liveChannel = null, needsRender = false, reloadTimer = null, lastLoadAt = 0;
+function isEditing(){
+  const el = document.activeElement;
+  return !!el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) && !!el.closest('.tabview');
+}
+function liveRender(){ if(isEditing()){ needsRender = true; return; } renderAll(); }
+document.addEventListener('focusout', () => {
+  if(!needsRender) return;
+  setTimeout(() => { if(isEditing()) return; needsRender = false; renderAll(); }, 60);
+});
+function scheduleReload(delay){
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => { if(isEditing() || dirty.size){ scheduleReload(3000); return; } loadData(); }, delay || 1200);
+}
+/* Opening a tab reloads only if the data is a little old (saves the free plan's bandwidth) */
+function refreshIfStale(){
+  if(!sb || !enteredFor || dirty.size) return;
+  if(Date.now() - lastLoadAt > (isStaff() ? 120000 : 30000)) loadData();
+}
+document.addEventListener('visibilitychange', () => { if(!document.hidden) refreshIfStale(); });
+const sameBillData = (a, b) => JSON.stringify(billToRow(a)) === JSON.stringify(billToRow(b)) && a.verified === b.verified;
+
+function startRealtime(){
+  if(liveChannel || !sb || !sb.channel) return;
+  liveChannel = sb.channel('live:ledger')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bills' }, (payload) => {
+      if(payload.eventType === 'DELETE'){
+        if(bills.some(b => b.id === payload.old.id)){ bills = bills.filter(b => b.id !== payload.old.id); liveRender(); }
+        return;
+      }
+      const incoming = rowToBill(payload.new);
+      const idx = bills.findIndex(b => b.id === incoming.id);
+      if(idx === -1){ scheduleReload(800); return; }     // a bill that just became visible to me (e.g. newly assigned)
+      if(savePending['b_' + incoming.id] || dirty.has(incoming.id)) return;   // my unsaved edit wins
+      incoming.visits = bills[idx].visits || [];
+      if(sameBillData(bills[idx], incoming)) return;      // my own echo, nothing new
+      bills[idx] = incoming;
+      liveRender();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, (payload) => {
+      if(payload.eventType === 'DELETE'){
+        const owner = bills.find(b => (b.visits||[]).some(v => v.id === payload.old.id));
+        if(owner){ owner.visits = owner.visits.filter(v => v.id !== payload.old.id); liveRender(); }
+        return;
+      }
+      const v = rowToVisit(payload.new);
+      const bill = bills.find(b => b.id === payload.new.bill_id);
+      if(!bill){ scheduleReload(800); return; }           // visit on a bill I do not have yet (e.g. newly assigned to me)
+      if(savePending['v_' + v.id]) return;
+      bill.visits = bill.visits || [];
+      const i = bill.visits.findIndex(x => x.id === v.id);
+      if(i === -1) bill.visits.push(v);
+      else if(JSON.stringify(visitToRow(bill.visits[i], bill.id)) === JSON.stringify(visitToRow(v, bill.id))) return;
+      else bill.visits[i] = v;
+      liveRender();
+    })
+    .subscribe();
+}
+
+/* Per-row, debounced (400ms) so rapid typing doesn't fire a request per keystroke.
+   Debounce is keyed per bill/visit id, so editing two different rows never blocks
+   or overwrites each other's saves. */
+const saveTimers = {};
+const savePending = {};   // edits typed but not yet written to the database
+const STAFF_COLS = ['delivery_date','delivery_status','amount_at_delivery','comments','next_visit_planned','retailer','date','area'];
+const normv = v => (v === '' || v === undefined) ? null : v;
+/* ---- Manual save --------------------------------------------------------
+   Edits to bills (Delivery Details and Signed Bills) are NOT sent to the database
+   keystroke by keystroke. They are kept on the page, rows turn light yellow, and the
+   "Save changes" button at the top writes everything in one go. */
+const dirty = new Map();      // bill id -> { bill, v }   (v counts edits so a save never hides a newer edit)
+let savingAll = false;
+function markDirty(bill){
+  const e = dirty.get(bill.id) || { bill, v: 0 };
+  e.bill = bill; e.v++;
+  dirty.set(bill.id, e);
+  updateSaveUi();
+}
+function scheduleSaveBill(bill){ if(sb) markDirty(bill); }   // kept for the existing editing code
+function updateSaveUi(){
+  const n = dirty.size;
+  $$('.save-all-btn').forEach(btn => {
+    btn.disabled = n === 0 || savingAll;
+    btn.textContent = savingAll ? 'Saving…' : (n ? `Save changes (${n})` : 'Save changes');
+  });
+  $$('.discard-btn').forEach(btn => { btn.hidden = n === 0 || savingAll; });
+  if(n && !savingAll) setSaveStatus('dirty', `${n} unsaved change${n===1?'':'s'} — click to save`);
+}
+async function saveAllChanges(){
+  if(!sb || savingAll || !dirty.size) return;
+  savingAll = true;
+  const batch = [...dirty.entries()].map(([id, e]) => ({ id, v: e.v, bill: e.bill }));
+  batch.forEach(x => { savePending['b_' + x.id] = true; });
+  updateSaveUi();
+  setSaveStatus('saving', `Saving ${batch.length}…`);
+  const done = [], failed = [], locked = [];
+  try {
+    if(isStaff()){
+      // delivery partners / sales persons: each bill sends only the columns that changed
+      const saveOne = async (x) => {
+        const row = billToRow(x.bill), snap = x.bill._snap || (x.bill._snap = {}), patch = {};
+        STAFF_COLS.forEach(k => { if(normv(row[k]) !== normv(snap[k])) patch[k] = row[k]; });
+        if(!Object.keys(patch).length){ done.push(x); return; }
+        const { error } = await sb.from('bills').update(patch).eq('id', x.id);
+        if(!error){ Object.keys(patch).forEach(k => { snap[k] = patch[k]; }); done.push(x); }
+        else if(/verified/i.test(error.message || '')) locked.push(x);
+        else { console.error(error); failed.push(x); }
+      };
+      for(let i = 0; i < batch.length; i += 6) await Promise.all(batch.slice(i, i + 6).map(saveOne));
+    } else {
+      // admin: one request per 200 bills
+      for(let i = 0; i < batch.length; i += 200){
+        const chunk = batch.slice(i, i + 200);
+        const { error } = await sb.from('bills').upsert(chunk.map(x => billToRow(x.bill)));
+        if(!error){ done.push(...chunk); continue; }
+        console.error(error);
+        for(const x of chunk){            // find out which bill is the problem
+          const r = await sb.from('bills').upsert(billToRow(x.bill));
+          if(r.error){ console.error(r.error); failed.push(x); } else done.push(x);
+        }
+      }
+    }
+  } finally {
+    batch.forEach(x => { delete savePending['b_' + x.id]; });
+    savingAll = false;
+  }
+  [...done, ...locked].forEach(x => { const cur = dirty.get(x.id); if(cur && cur.v === x.v) dirty.delete(x.id); });
+  updateSaveUi();
+  if(failed.length){
+    toast(`${done.length} saved, ${failed.length} could not be saved — they stay yellow. Check your connection and press Save again.`);
+  } else if(locked.length){
+    toast(`${done.length} saved. ${locked.length} bill${locked.length===1?' was':'s were'} verified by the office and could not be changed.`);
+    setSaveStatus('idle', 'Saved'); await loadData();
+  } else {
+    toast(`Saved ${done.length} change${done.length===1?'':'s'}.`);
+    setSaveStatus('idle', 'Saved');
+  }
+  if(dirty.size) updateSaveUi();
+  renderCurrentTab();
+}
+function discardChanges(){
+  if(!dirty.size) return;
+  if(!confirm(`Discard ${dirty.size} unsaved change${dirty.size===1?'':'s'}? They will be lost.`)) return;
+  dirty.clear(); updateSaveUi(); loadData();
+}
+/* Manual Refresh: warn before throwing away unsaved edits */
+function refreshNow(){
+  if(dirty.size){
+    if(!confirm(`You have ${dirty.size} unsaved change${dirty.size===1?'':'s'}. Refreshing will discard them. Continue?`)) return;
+    dirty.clear(); updateSaveUi();
+  }
+  loadData();
+}
+function scheduleSaveVisit(visit, billId){
+  if(!sb) return;
+  setSaveStatus('saving', 'Saving…');
+  clearTimeout(saveTimers['v_'+visit.id]);
+  savePending['v_'+visit.id] = true;
+  saveTimers['v_'+visit.id] = setTimeout(async () => {
+    const { error } = await sb.from('visits').upsert(visitToRow(visit, billId));
+    if(error){ console.error(error); toast('Save failed — check your connection.'); setSaveStatus('idle', 'Save failed'); }
+    else if(!dirty.size) setSaveStatus('idle', 'Saved');
+    delete savePending['v_'+visit.id];
+  }, 400);
+}
+async function insertBillsRemote(newBills){
+  if(!sb) return;
+  setSaveStatus('saving', 'Saving…');
+  const { error } = await sb.from('bills').insert(newBills.map(billToRow));
+  if(error){ console.error(error); toast('Import failed to save — check your connection.'); setSaveStatus('idle', 'Save failed'); }
+  else setSaveStatus('idle', 'Saved');
+}
+async function insertVisitRemote(visit, billId){
+  if(!sb) return;
+  setSaveStatus('saving', 'Saving…');
+  const { error } = await sb.from('visits').insert(visitToRow(visit, billId));
+  if(error){ console.error(error); toast('Save failed — check your connection.'); setSaveStatus('idle', 'Save failed'); }
+  else setSaveStatus('idle', 'Saved');
+}
+async function deleteBillRemote(id){
+  if(!sb) return;
+  dirty.delete(id); updateSaveUi();
+  const { error } = await sb.from('bills').delete().eq('id', id); // visits cascade via FK
+  if(error){ console.error(error); toast('Delete failed — check your connection.'); }
+}
+async function deleteVisitRemote(id){
+  if(!sb) return;
+  const { error } = await sb.from('visits').delete().eq('id', id);
+  if(error){ console.error(error); toast('Delete failed — check your connection.'); }
+}
+
+function setSaveStatus(state, text){
+  const pill = $('#saveStatus');
+  pill.classList.toggle('saving', state==='saving' || state==='loading');
+  pill.classList.toggle('unsaved', state==='dirty');
+  $('#saveStatusText').textContent = text;
+}
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ---------------- derived calculations ----------------
+   Direct, no-assumption money math: balance = Total Amount − Amount
+   Collected − Discount (− any later follow-up collection for Signed
+   bills). Selecting "Cash" (or any status) never auto-zeroes the
+   balance — it only drops once you actually type the amount collected. */
+function paidAtDeliveryPlusDiscount(b){
+  return toNum(b.amountAtDelivery) + toNum(b.discount);
+}
+function followUpCollected(b){
+  return (b.visits||[]).reduce((s,v) => s + toNum(v.amount), 0);
+}
+function amountReceived(b){
+  return paidAtDeliveryPlusDiscount(b) + followUpCollected(b);
+}
+function totalCollected(b){
+  const status = (b.deliveryStatus||'').toLowerCase();
+  if(status === 'cancelled') return 0;
+  return amountReceived(b);
+}
+function balanceOutstanding(b){
+  const status = (b.deliveryStatus||'').toLowerCase();
+  if(status === 'cancelled') return 0;
+  return toNum(b.totalAmount) - amountReceived(b);
+}
+function settlementStatus(b){
+  const status = (b.deliveryStatus||'').toLowerCase();
+  if(!status) return 'Unknown Status';
+  if(status === 'cancelled') return 'Cancelled';
+  const bal = balanceOutstanding(b);
+  if(['cash','upi/bank','cheque'].includes(status)){
+    if(bal <= 0) return 'Settled on Delivery';
+    if(totalCollected(b) > 0) return 'Partially Collected';
+    return 'Pending Collection';
+  }
+  if(status === 'part delivered'){
+    return bal <= 0 ? 'Fully Collected' : 'Part Delivered - Pending';
+  }
+  if(status === 'signed'){
+    if(bal <= 0) return 'Fully Collected (Follow-up)';
+    if(followUpCollected(b) > 0) return 'Partially Collected';
+    return 'Pending Collection';
+  }
+  return 'Unknown Status';
+}
+function badgeClass(label){
+  const l = label.toLowerCase();
+  if(l.includes('cancel')) return 'cancelled';
+  if(l.includes('settled')) return 'settled';
+  if(l.includes('fully')) return 'settled';
+  if(l.includes('partial')) return 'partial';
+  if(l.includes('part delivered')) return 'part';
+  if(l.includes('pending')) return 'pending';
+  return 'unknown';
+}
+function statusBadgeClass(status){
+  const s = (status||'').toLowerCase();
+  if(s==='cash') return 'cash';
+  if(s==='signed') return 'signed';
+  if(s==='cancelled') return 'cancelled';
+  if(s==='part delivered') return 'part';
+  if(s==='upi/bank' || s==='cheque') return 'settled';
+  return 'unknown';
+}
+
+/* ---------------- import / parsing ---------------- */
+let pendingImport = [];
+let importSkipped = { existing: [], inFile: [] };   // rows left out because they are duplicates
+let importing = false;
+
+/* ---- Duplicate protection for imports ---------------------------------
+   Same Company + same Vch/Bill No in the same financial year (April–March) = the same bill, so it is
+   never added twice (capitals and extra spaces ignored). Voucher numbers restart each year, so "2907"
+   next April is a different bill. A row with no voucher number only counts as a duplicate when company,
+   date, retailer and amount are all identical. */
+const normKey = s => String(s||'').trim().replace(/\s+/g, ' ').toLowerCase();
+const fiscalYear = d => { const m = /^(\d{4})-(\d{2})/.exec(d||''); return m ? String(+m[2] >= 4 ? +m[1] : +m[1] - 1) : ''; };
+function importKey(b){
+  const no = normKey(b.billNo);
+  if(no) return `${normKey(b.company)}|${no}|${fiscalYear(b.date)}`;
+  return `${normKey(b.company)}||${b.date||''}|${normKey(b.retailer)}|${toNum(b.totalAmount)}`;
+}
+function splitDuplicates(rows, existingBills){
+  const exact = new Set(), loose = new Set(), seen = new Set();
+  existingBills.forEach(b => { exact.add(importKey(b)); if(normKey(b.billNo)) loose.add(normKey(b.company) + '|' + normKey(b.billNo)); });
+  const isExisting = r => exact.has(importKey(r)) ||
+    (!fiscalYear(r.date) && normKey(r.billNo) && loose.has(normKey(r.company) + '|' + normKey(r.billNo)));   // no date on the row: match on voucher number alone
+  const fresh = [], existing = [], inFile = [];
+  rows.forEach(r => {
+    const k = importKey(r);
+    if(isExisting(r)) existing.push(r);
+    else if(seen.has(k)) inFile.push(r);
+    else { seen.add(k); fresh.push(r); }
+  });
+  return { fresh, existing, inFile };
+}
+function applyDuplicateFilter(){
+  const { fresh, existing, inFile } = splitDuplicates(pendingImport, bills);
+  pendingImport = fresh; importSkipped = { existing, inFile };
+}
+function importSummaryText(parsed){
+  const s = importSkipped.existing.length + importSkipped.inFile.length;
+  return `${parsed} rows read — ${pendingImport.length} new` + (s ? `, ${s} duplicate${s===1?'':'s'} skipped.` : '.');
+}
+/* Read company / voucher / date of EVERY bill straight from the database (not just what this page loaded) */
+async function fetchExistingBills(){
+  const out = [], PAGE = 1000;
+  let from = 0;
+  while(true){
+    const { data, error } = await sb.from('bills').select('company,bill_no,date,retailer,total_amount').order('id', { ascending: true }).range(from, from + PAGE - 1);
+    if(error) throw error;
+    if(!data.length) break;
+    data.forEach(r => out.push({ company: r.company, billNo: r.bill_no, date: r.date, retailer: r.retailer, totalAmount: r.total_amount }));
+    from += data.length;
+  }
+  return out;
+}
+let excelState = { rows: [], headerRowIdx: -1, headers: [] };
+
+const FIELD_DEFS = [
+  {key:'company', label:'Company', keywords:['company'], required:true},
+  {key:'date', label:'Date', keywords:['date'], required:true},
+  {key:'billNo', label:'Vch/Bill No', keywords:['vch','bill','voucher'], required:true},
+  {key:'retailer', label:'Retailer', keywords:['retailer','party','customer','shop'], required:true},
+  {key:'amount', label:'Total Amount', keywords:['total amount','total'], required:true},
+  {key:'deliveryDate', label:'Delivery Date', keywords:['delivery date'], required:false},
+  {key:'area', label:'Area', keywords:['area'], required:false},
+  {key:'salesPerson', label:'Sales Person', keywords:['sales person','salesperson'], required:false},
+  {key:'deliveryPartner', label:'Delivery Partner', keywords:['delivery partner','delivery boy'], required:false},
+  {key:'deliveryStatus', label:'Delivery Status', keywords:['delivery status','status'], required:false},
+  {key:'amountAtDelivery', label:'Amount Collected', keywords:['amount collected','collected','received'], required:false},
+  {key:'discount', label:'Discount', keywords:['discount'], required:false},
+  {key:'comments', label:'Comments', keywords:['comment','notes','remark'], required:false},
+];
+
+const STATUS_CANON = {'cash':'Cash','cancelled':'Cancelled','signed':'Signed','cheque':'Cheque','part delivered':'Part Delivered','upi/bank':'UPI/Bank','upi':'UPI/Bank','bank':'UPI/Bank'};
+function canonImportStatus(s){
+  const t = String(s||'').trim();
+  if(!t) return '';
+  return STATUS_CANON[t.toLowerCase()] || t;
+}
+
+function colLetter(i){
+  let s=''; i++;
+  while(i>0){ const m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26); }
+  return s;
+}
+
+function excelDateFmt(v){
+  return parseDateLoose(v);
+}
+
+/* ---- dropzone / file handling ---- */
+const dropzone = $('#dropzone');
+const fileInput = $('#fileInput');
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if(fileInput.files.length) handleFile(fileInput.files[0]); });
+
+function handleFile(file){
+  const okExt = /\.(xlsx|xls|csv)$/i.test(file.name);
+  if(!okExt){ toast('Please choose a .xlsx, .xls or .csv file.'); return; }
+  $('#fileChip').innerHTML = `📄 ${escapeHtml(file.name)} <button id="removeFileBtn" title="Remove">✕</button>`;
+  $('#fileChipRow').style.display = 'block';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type:'array', cellDates:true});
+      excelState.workbook = workbook;
+      const sheetPickerRow = $('#sheetPickerRow');
+      const sheetPicker = $('#sheetPicker');
+      if(workbook.SheetNames.length > 1){
+        sheetPicker.innerHTML = workbook.SheetNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+        sheetPickerRow.style.display = 'block';
+        sheetPicker.onchange = () => loadSheet(sheetPicker.value);
+      } else {
+        sheetPickerRow.style.display = 'none';
+      }
+      loadSheet(workbook.SheetNames[0]);
+    }catch(err){
+      toast('Could not read that file — is it a valid Excel/CSV file?');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+document.addEventListener('click', (e) => {
+  if(e.target && e.target.id === 'removeFileBtn') resetFileImport();
+});
+
+function resetFileImport(){
+  fileInput.value = '';
+  $('#fileChipRow').style.display = 'none';
+  $('#sheetPickerRow').style.display = 'none';
+  $('#mappingBox').style.display = 'none';
+  excelState = { rows: [], headerRowIdx: -1, headers: [] };
+}
+
+$('#cancelFileBtn').addEventListener('click', resetFileImport);
+
+function loadSheet(sheetName){
+  const ws = excelState.workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', blankrows:false});
+  excelState.rows = rows;
+
+  // find header row: first row where some cell text matches a known keyword
+  let headerRowIdx = 0;
+  for(let i=0;i<Math.min(rows.length,5);i++){
+    const rowText = rows[i].map(c=>String(c||'').toLowerCase()).join(' ');
+    if(rowText.includes('company') || rowText.includes('retailer')){ headerRowIdx = i; break; }
+  }
+  excelState.headerRowIdx = headerRowIdx;
+  excelState.headers = (rows[headerRowIdx] || []).map(h => String(h||'').trim());
+
+  buildMappingUI();
+}
+
+function buildMappingUI(){
+  const headers = excelState.headers;
+  const colCount = Math.max(headers.length, 5);
+  const grid = $('#mapGrid');
+
+  function renderField(f, idx){
+    const options = [];
+    for(let c=0;c<colCount;c++){
+      const h = headers[c];
+      const label = h ? `${colLetter(c)} — ${h}` : `Column ${colLetter(c)}`;
+      options.push({c, label});
+    }
+    const guess = options.find(o => f.keywords.some(k => (headers[o.c]||'').toLowerCase().includes(k)));
+    const notInFile = '<option value="-1">— not in this file —</option>';
+    const guessVal = guess ? guess.c : (f.required ? idx : -1);
+    return `<div class="map-field">
+      <label>${f.label}${f.required ? '' : ' <span style="opacity:.6;">(optional)</span>'}</label>
+      <select data-target="${f.key}">
+        ${f.required ? '' : notInFile}
+        ${options.map(o=>`<option value="${o.c}" ${o.c===guessVal?'selected':''}>${escapeHtml(o.label)}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
+  const required = FIELD_DEFS.filter(f => f.required);
+  const optional = FIELD_DEFS.filter(f => !f.required);
+  grid.innerHTML =
+    `<div class="map-section-label">Required</div>` +
+    required.map((f,i)=>renderField(f,i)).join('') +
+    `<div class="map-section-label" style="grid-column:1/-1; margin-top:6px;">Optional — only if your file has these</div>` +
+    optional.map((f,i)=>renderField(f,i)).join('');
+  $('#mappingBox').style.display = 'block';
+}
+
+$('#buildPreviewBtn').addEventListener('click', () => {
+  const mapping = {};
+  $$('#mapGrid select').forEach(sel => { mapping[sel.dataset.target] = parseInt(sel.value,10); });
+
+  function cell(r, key){
+    const c = mapping[key];
+    return (c === undefined || c === -1) ? '' : r[c];
+  }
+
+  const dataRows = excelState.rows.slice(excelState.headerRowIdx + 1);
+  pendingImport = dataRows.map(r => {
+    return {
+      id: uid(),
+      company: String(cell(r,'company')||'').trim(),
+      date: excelDateFmt(cell(r,'date')),
+      billNo: String(cell(r,'billNo')||'').trim(),
+      retailer: String(cell(r,'retailer')||'').trim(),
+      totalAmount: toNum(cell(r,'amount')),
+      deliveryDate: excelDateFmt(cell(r,'deliveryDate')),
+      area: String(cell(r,'area')||'').trim(),
+      salesPerson: String(cell(r,'salesPerson')||'').trim(),
+      deliveryPartner: String(cell(r,'deliveryPartner')||'').trim(),
+      deliveryStatus: canonImportStatus(cell(r,'deliveryStatus')),
+      amountAtDelivery: cell(r,'amountAtDelivery')==='' ? '' : toNum(cell(r,'amountAtDelivery')),
+      comments: String(cell(r,'comments')||'').trim(),
+      discount: cell(r,'discount')==='' ? '' : toNum(cell(r,'discount')),
+      visits: [], nextVisitPlanned:''
+    };
+  }).filter(r => r.company || r.billNo || r.retailer);
+  const parsedCount = pendingImport.length;
+  applyDuplicateFilter();
+
+  const extraFieldsUsed = ['deliveryDate','area','salesPerson','deliveryPartner','deliveryStatus','amountAtDelivery','discount','comments']
+    .filter(k => mapping[k] !== -1 && mapping[k] !== undefined);
+  $('#mapInfo').textContent = importSummaryText(parsedCount) + (extraFieldsUsed.length ? ` Includes ${extraFieldsUsed.length} extra column${extraFieldsUsed.length===1?'':'s'} beyond the core 5.` : '');
+  renderPreview();
+  $('#previewPanel').scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+function splitLine(line){
+  if(line.includes('\t')) return line.split('\t');
+  // naive CSV split (good enough for this data shape)
+  return line.split(',');
+}
+
+$('#parseBtn').addEventListener('click', () => {
+  const raw = $('#importBox').value.trim();
+  if(!raw){ $('#parseInfo').textContent = 'Paste something first.'; return; }
+  const lines = raw.split(/\r?\n/).filter(l => l.trim().length);
+  let rows = lines.map(splitLine);
+  // drop header row if it looks like one
+  if(rows.length && /company/i.test(rows[0][0]||'')) rows = rows.slice(1);
+
+  pendingImport = rows.map(cols => {
+    const [company, date, billNo, retailer, amount] = cols;
+    return {
+      id: uid(),
+      company: (company||'').trim(),
+      date: parseDateLoose(date),
+      billNo: (billNo||'').trim(),
+      retailer: (retailer||'').trim(),
+      totalAmount: toNum((amount||'0').toString().replace(/[₹,\s]/g,'')),
+      deliveryDate:'', area:'', salesPerson:'', deliveryPartner:'', deliveryStatus:'',
+      amountAtDelivery:'', comments:'', discount:'',
+      visits: [], nextVisitPlanned:''
+    };
+  }).filter(r => r.company || r.billNo || r.retailer);
+
+  const parsedCount = pendingImport.length;
+  applyDuplicateFilter();
+  $('#parseInfo').textContent = importSummaryText(parsedCount);
+  renderPreview();
+});
+
+function renderPreview(){
+  const panel = $('#previewPanel');
+  const nExisting = importSkipped.existing.length, nInFile = importSkipped.inFile.length, nSkipped = nExisting + nInFile;
+  if(!pendingImport.length && !nSkipped){ panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+
+  const hasExtra = pendingImport.some(r => r.deliveryDate || r.area || r.salesPerson || r.deliveryPartner || r.deliveryStatus || r.amountAtDelivery !== '' || r.discount !== '' || r.comments);
+
+  $('#previewHead').innerHTML = `<tr>
+    <th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th>
+    ${hasExtra ? '<th>Delivery Date</th><th>Sales Person</th><th>Delivery Partner</th><th>Delivery Status</th>' : ''}
+  </tr>`;
+
+  $('#previewBody').innerHTML = pendingImport.length ? pendingImport.map(r => `
+    <tr>
+      <td>${escapeHtml(r.company)}</td>
+      <td>${escapeHtml(r.date)}</td>
+      <td>${escapeHtml(r.billNo)}</td>
+      <td>${escapeHtml(r.retailer)}</td>
+      <td class="num">${fmtMoney(r.totalAmount)}</td>
+      ${hasExtra ? `<td>${escapeHtml(r.deliveryDate)}</td><td>${escapeHtml(r.salesPerson)}</td><td>${escapeHtml(r.deliveryPartner)}</td><td>${escapeHtml(r.deliveryStatus)}</td>` : ''}
+    </tr>`).join('') : `<tr><td colspan="9" class="footnote">No new bills in this file.</td></tr>`;
+
+  const n = pendingImport.length;
+  const commit = $('#commitBtn');
+  commit.disabled = !n || importing;
+  commit.textContent = importing ? commit.textContent : (n ? `Add ${n} new bill${n===1?'':'s'} to the ledger` : 'Nothing new to add');
+
+  // duplicates are never added; show what was left out and why
+  let html = '';
+  if(nSkipped){
+    const listed = [...importSkipped.existing.map(r => [r, 'Already in the ledger']), ...importSkipped.inFile.map(r => [r, 'Repeated in this file'])].slice(0, 200);
+    html = `<div class="dup-warn" style="font-size:13px;">⚠ ${nSkipped} duplicate bill${nSkipped===1?'':'s'} will NOT be added — ${nExisting} already in the ledger${nInFile ? `, ${nInFile} repeated inside your file` : ''}.
+      <details style="margin-top:6px;"><summary style="cursor:pointer;">Show the skipped bills</summary>
+        <div class="table-wrap" style="max-height:220px; margin-top:6px;"><table>
+          <thead><tr><th>Company</th><th>Date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th><th>Why skipped</th></tr></thead>
+          <tbody>${listed.map(([r, why]) => `<tr><td>${escapeHtml(r.company)}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.billNo)}</td><td>${escapeHtml(r.retailer)}</td><td class="num">${fmtMoney(r.totalAmount)}</td><td>${why}</td></tr>`).join('')}</tbody>
+        </table></div>
+        ${nSkipped > 200 ? '<div class="footnote">Showing the first 200.</div>' : ''}
+      </details></div>`;
+  }
+  $('#dupWarnBox').innerHTML = html;
+}
+
+$('#cancelPreviewBtn').addEventListener('click', () => {
+  pendingImport = []; importSkipped = { existing: [], inFile: [] };
+  renderPreview();
+});
+$('#clearBoxBtn').addEventListener('click', () => { $('#importBox').value=''; $('#parseInfo').textContent=''; });
+
+$('#commitBtn').addEventListener('click', async () => {
+  if(!pendingImport.length || importing) return;
+  importing = true;
+  const btn = $('#commitBtn');
+  btn.disabled = true; btn.textContent = 'Checking for duplicates…';
+  const inserted = [];
+  try {
+    // Last check, against the database itself: someone else may have imported the same bills since this page loaded.
+    const existingBills = sb ? await fetchExistingBills() : bills;
+    const { fresh, existing, inFile } = splitDuplicates(pendingImport, existingBills);
+    const lateSkipped = existing.length + inFile.length;
+    if(!fresh.length){
+      importSkipped = { existing: [...importSkipped.existing, ...existing], inFile: [...importSkipped.inFile, ...inFile] };
+      pendingImport = [];
+      toast('Every row is already in the ledger — nothing was imported.');
+      return;
+    }
+    btn.textContent = `Adding ${fresh.length} bills…`;
+    setSaveStatus('saving', 'Saving…');
+    if(sb){
+      for(let i = 0; i < fresh.length; i += 500){          // in batches of 500
+        const chunk = fresh.slice(i, i + 500);
+        const { error } = await sb.from('bills').insert(chunk.map(billToRow));
+        if(error) throw error;
+        inserted.push(...chunk);
+      }
+    } else inserted.push(...fresh);
+    bills = bills.concat(inserted);                          // only now does the page show them: they are saved
+    const skippedTotal = importSkipped.existing.length + importSkipped.inFile.length + lateSkipped;
+    pendingImport = []; importSkipped = { existing: [], inFile: [] };
+    $('#importBox').value = ''; $('#parseInfo').textContent = ''; $('#mapInfo').textContent = '';
+    renderAll(); setSaveStatus('idle', 'Saved');
+    toast(`${inserted.length} bill${inserted.length===1?'':'s'} added.` + (skippedTotal ? ` ${skippedTotal} duplicate${skippedTotal===1?'':'s'} skipped.` : ''));
+  } catch(err){
+    console.error(err);
+    if(inserted.length){                                     // some batches did save: show them, keep the rest for a retry
+      bills = bills.concat(inserted);
+      const done = new Set(inserted.map(r => r.id));
+      pendingImport = pendingImport.filter(r => !done.has(r.id));
+      renderAll();
+    }
+    setSaveStatus('idle', 'Import failed');
+    toast(inserted.length
+      ? `Import stopped part-way: ${inserted.length} bills were saved, the rest were not. Press the button again to add the rest (duplicates are skipped automatically).`
+      : 'Import failed — nothing was added. Check your connection and try again.');
+  } finally {
+    importing = false;
+    renderPreview();
+  }
+});
+
+function escapeHtml(s){
+  return String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+
+/* ============================================================
+   SIGNED BILLS LOADER (Signed Bills tab, admin only)
+   Four columns in: Company, Signed Bill No, Sales Person, Amount Outstanding.
+   Each row becomes a bill with status Signed, Total Amount = amount outstanding (so the balance
+   shows exactly that), plus one empty collection visit assigned to the sales person so the bill
+   appears in that person's login. Retailer, date and area/beat stay empty to be filled in later.
+   Every bill number is checked against the ledger (read live from the database) and an alert
+   is shown when it already exists.
+   ============================================================ */
+const SL_FIELDS = [
+  { key:'company',     label:'Company',            keywords:['company'] },
+  { key:'billNo',      label:'Signed Bill No',     keywords:['bill','vch','voucher','invoice'] },
+  { key:'salesPerson', label:'Sales Person',       keywords:['sales','salesman'] },
+  { key:'amount',      label:'Amount Outstanding', keywords:['outstanding','pending','balance','amount','total'] },
+];
+let slState = { workbook:null, rows:[], headerRowIdx:0, headers:[] };
+let slPending = [];      // { company, billNo, salesPerson, amount, problem, notListed, dups, sig, load }
+let slLoading = false;
+
+const slKey = s => normKey(s);
+function slCanonName(n){
+  const hit = ASSIGNED_FOR_OPTIONS.find(x => sameName(x, n));
+  return hit ? { name: hit, listed: true } : { name: String(n||'').trim().replace(/\s+/g,' '), listed: false };
+}
+
+/* every bill's company / bill no / status / amount, straight from the database */
+async function slFetchExisting(){
+  if(!sb) return bills.map(b => ({ company:b.company, billNo:b.billNo, status:b.deliveryStatus, amount:b.totalAmount }));
+  const out = [], PAGE = 1000;
+  let from = 0;
+  while(true){
+    const { data, error } = await sb.from('bills').select('company,bill_no,delivery_status,total_amount').order('id', { ascending:true }).range(from, from + PAGE - 1);
+    if(error) throw error;
+    if(!data.length) break;
+    data.forEach(r => out.push({ company:r.company, billNo:r.bill_no, status:r.delivery_status, amount:r.total_amount }));
+    from += data.length;
+  }
+  return out;
+}
+function slIndex(existing){
+  const idx = new Map();
+  existing.forEach(e => { const k = slKey(e.billNo); if(k){ if(!idx.has(k)) idx.set(k, []); idx.get(k).push(e); } });
+  return idx;
+}
+/* flag rows: problems, bill numbers already in the ledger, repeats inside the file */
+function slClassify(rows, idx){
+  const seen = new Set();
+  rows.forEach(r => {
+    r.problem = ''; r.dups = []; r.inFile = false;
+    if(!r.billNo) r.problem = 'Bill number missing';
+    else if(!r.company) r.problem = 'Company missing';
+    else if(!r.salesPerson) r.problem = 'Sales person missing';
+    else if(!(r.amount > 0)) r.problem = 'Amount outstanding missing or zero';
+    if(!r.problem){
+      r.dups = idx.get(slKey(r.billNo)) || [];
+      const fk = slKey(r.company) + '|' + slKey(r.billNo);
+      if(seen.has(fk)) r.inFile = true; else seen.add(fk);
+    }
+    r.sameCompany = r.dups.some(d => slKey(d.company) === slKey(r.company));
+    r.sig = r.dups.length + ':' + r.sameCompany + ':' + r.inFile;
+  });
+}
+const slFlagged = r => !r.problem && (r.dups.length || r.inFile);
+
+function slDescribe(d){ return `${d.company || '—'} · ${d.status || 'no status'} · ${fmtMoney(toNum(d.amount))}`; }
+
+function slAlertText(rows){
+  const lines = [];
+  rows.slice(0, 12).forEach(r => {
+    if(r.dups.length) lines.push(`• Bill ${r.billNo} (${r.company}) is already in the ledger: ${slDescribe(r.dups[0])}${r.dups.length > 1 ? ` (+${r.dups.length - 1} more)` : ''}`);
+    else if(r.inFile) lines.push(`• Bill ${r.billNo} (${r.company}) appears more than once in your file`);
+  });
+  const more = rows.length > 12 ? `\n…and ${rows.length - 12} more (see the preview).` : '';
+  return `⚠ ${rows.length} bill number${rows.length===1?'':'s'} already exist${rows.length===1?'s':''}:\n\n${lines.join('\n')}${more}\n\nRows for the same company are skipped by default. Tick “Load?” on a row only if you really want it added again.`;
+}
+
+async function slBuildPreview(rawRows){
+  const rows = rawRows.map(r => {
+    const nm = slCanonName(r.salesPerson);
+    return { company:String(r.company||'').trim().replace(/\s+/g,' '), billNo:String(r.billNo||'').trim(),
+             salesPerson:nm.name, notListed: !!nm.name && !nm.listed, amount:toNum(r.amount) };
+  }).filter(r => r.company || r.billNo || r.salesPerson || r.amount);
+  if(!rows.length){ toast('No rows found to preview.'); return; }
+  $('#slSummary').textContent = 'Checking the ledger for these bill numbers…';
+  $('#slPreview').style.display = 'block';
+  try{
+    slClassify(rows, slIndex(await slFetchExisting()));
+  }catch(err){
+    console.error(err);
+    $('#slPreview').style.display = 'none';
+    toast('Could not check the ledger for duplicates — nothing was loaded. Check your connection and try again.');
+    return;
+  }
+  // default: skip same-company duplicates and file repeats; other rows load
+  rows.forEach(r => { r.load = !r.problem && !(r.sameCompany || r.inFile); });
+  rows.forEach(r => { r._sig = r.sig; });
+  slPending = rows;
+  slRenderPreview();
+  const flagged = rows.filter(slFlagged);
+  if(flagged.length) alert(slAlertText(flagged));
+  $('#slPreview').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function slRenderPreview(){
+  const rows = slPending;
+  const problems = rows.filter(r => r.problem).length, flagged = rows.filter(slFlagged).length;
+  const ready = rows.filter(r => r.load && !r.problem).length;
+  $('#slSummary').textContent = `${rows.length} rows read — ${ready} will be loaded` + (flagged ? `, ${flagged} bill number${flagged===1?'':'s'} already exist` : '') + (problems ? `, ${problems} can't be loaded (incomplete)` : '') + '.';
+  $('#slBody').innerHTML = rows.map((r, i) => {
+    let check;
+    if(r.problem) check = `<span style="color:var(--brick);">${escapeHtml(r.problem)}</span>`;
+    else if(r.dups.length) check = `<span style="color:var(--brick);">⚠ Already in ledger: ${escapeHtml(slDescribe(r.dups[0]))}${r.dups.length>1?` (+${r.dups.length-1} more)`:''}${r.sameCompany ? '' : ' — different company'}</span>`;
+    else if(r.inFile) check = `<span style="color:var(--brick);">⚠ Repeated in this file</span>`;
+    else if(r.notListed) check = `<span style="color:var(--amber);">Sales person not in the name list — they won't see it unless the name matches their login</span>`;
+    else check = '<span style="color:var(--green);">OK</span>';
+    return `<tr><td><input type="checkbox" data-sl="${i}" ${r.load?'checked':''} ${r.problem?'disabled':''}></td>
+      <td>${escapeHtml(r.company)}</td><td>${escapeHtml(r.billNo)}</td><td>${escapeHtml(r.salesPerson)}</td>
+      <td class="num mono">${r.amount>0 ? fmtMoney(r.amount) : ''}</td><td style="font-size:12.5px;">${check}</td></tr>`;
+  }).join('');
+  const btn = $('#slCommitBtn');
+  btn.disabled = !ready || slLoading;
+  if(!slLoading) btn.textContent = ready ? `Load ${ready} signed bill${ready===1?'':'s'}` : 'Nothing to load';
+  const warn = rows.filter(slFlagged);
+  $('#slWarn').innerHTML = warn.length ? `<div class="dup-warn" style="font-size:13px;">⚠ ${warn.length} row${warn.length===1?'':'s'} match a bill number already in the ledger. Same-company duplicates are skipped unless you tick them.</div>` : '';
+}
+$('#slBody').addEventListener('change', e => {
+  const i = e.target.dataset && e.target.dataset.sl;
+  if(i === undefined) return;
+  slPending[+i].load = e.target.checked;
+  slRenderPreview();
+});
+
+function slReset(){
+  $('#slFile').value = '';
+  $('#slSheetRow').style.display = 'none';
+  $('#slMapBox').style.display = 'none';
+  slState = { workbook:null, rows:[], headerRowIdx:0, headers:[] };
+}
+function slDiscard(){ slPending = []; $('#slPreview').style.display = 'none'; }
+
+const slDrop = $('#slDropzone'), slFile = $('#slFile');
+slDrop.addEventListener('click', e => { if(e.target !== slFile) slFile.click(); });
+slDrop.addEventListener('dragover', e => { e.preventDefault(); slDrop.classList.add('drag'); });
+slDrop.addEventListener('dragleave', () => slDrop.classList.remove('drag'));
+slDrop.addEventListener('drop', e => { e.preventDefault(); slDrop.classList.remove('drag'); if(e.dataTransfer.files.length) slHandleFile(e.dataTransfer.files[0]); });
+slFile.addEventListener('change', () => { if(slFile.files.length) slHandleFile(slFile.files[0]); });
+$('#slResetBtn').addEventListener('click', () => { slReset(); slDiscard(); });
+$('#slDiscardBtn').addEventListener('click', slDiscard);
+$('#slClearBtn').addEventListener('click', () => { $('#slPaste').value = ''; });
+
+function slHandleFile(file){
+  if(!/\.(xlsx|xls|csv)$/i.test(file.name)){ toast('Please choose a .xlsx, .xls or .csv file.'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      slState.workbook = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
+      const names = slState.workbook.SheetNames, pick = $('#slSheet');
+      if(names.length > 1){
+        pick.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+        pick.onchange = () => slLoadSheet(pick.value);
+        $('#slSheetRow').style.display = 'block';
+      } else $('#slSheetRow').style.display = 'none';
+      slLoadSheet(names[0]);
+    }catch(err){ console.error(err); toast('Could not read that file — is it a valid Excel/CSV file?'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function slLoadSheet(name){
+  const rows = XLSX.utils.sheet_to_json(slState.workbook.Sheets[name], { header:1, defval:'', blankrows:false });
+  let h = 0;
+  for(let i = 0; i < Math.min(rows.length, 5); i++){
+    const t = rows[i].map(c => String(c||'').toLowerCase()).join(' ');
+    if(t.includes('company') || t.includes('bill') || t.includes('outstanding')){ h = i; break; }
+  }
+  slState.rows = rows; slState.headerRowIdx = h;
+  slState.headers = (rows[h] || []).map(x => String(x||'').trim());
+  const headers = slState.headers, colCount = Math.max(headers.length, 4);
+  $('#slMapGrid').innerHTML = SL_FIELDS.map((f, fi) => {
+    let guess = -1;
+    for(const k of f.keywords){ guess = headers.findIndex(x => x.toLowerCase().includes(k)); if(guess >= 0) break; }
+    if(guess < 0) guess = fi;
+    const opts = Array.from({ length: colCount }, (_, c) => `<option value="${c}" ${c===guess?'selected':''}>${escapeHtml(headers[c] ? `${colLetter(c)} — ${headers[c]}` : `Column ${colLetter(c)}`)}</option>`).join('');
+    return `<div class="map-field"><label>${f.label}</label><select data-sl-target="${f.key}">${opts}</select></div>`;
+  }).join('');
+  $('#slMapBox').style.display = 'block';
+}
+$('#slPreviewBtn').addEventListener('click', () => {
+  const map = {};
+  $$('#slMapGrid select').forEach(sel => { map[sel.dataset.slTarget] = parseInt(sel.value, 10); });
+  const data = slState.rows.slice(slState.headerRowIdx + 1).map(r => ({
+    company: r[map.company], billNo: r[map.billNo], salesPerson: r[map.salesPerson], amount: r[map.amount] }));
+  slBuildPreview(data);
+});
+$('#slParseBtn').addEventListener('click', () => {
+  const raw = $('#slPaste').value.trim();
+  if(!raw){ toast('Paste something first.'); return; }
+  let rows = raw.split(/\r?\n/).filter(l => l.trim().length).map(splitLine);
+  if(rows.length && /company/i.test(rows[0][0] || '')) rows = rows.slice(1);
+  slBuildPreview(rows.map(c => ({ company:c[0], billNo:c[1], salesPerson:c[2], amount:c[3] })));
+});
+
+$('#slCommitBtn').addEventListener('click', async () => {
+  if(slLoading) return;
+  const chosen = slPending.filter(r => r.load && !r.problem);
+  if(!chosen.length) return;
+  slLoading = true;
+  const btn = $('#slCommitBtn');
+  btn.disabled = true; btn.textContent = 'Checking for duplicates…';
+  const added = [];
+  try{
+    // last check against the database: someone may have loaded the same bills since the preview
+    slClassify(slPending, slIndex(await slFetchExisting()));
+    const changed = chosen.filter(r => r.sig !== r._sig);
+    if(changed.length){
+      const newlyFlagged = changed.filter(slFlagged);
+      slPending.forEach(r => { r._sig = r.sig; if(slFlagged(r) && (r.sameCompany || r.inFile)) r.load = false; });
+      slRenderPreview();
+      if(newlyFlagged.length){ alert(slAlertText(newlyFlagged) + '\n\nNothing was loaded. Review the preview and press Load again.'); return; }
+    }
+    btn.textContent = `Loading ${chosen.length} bills…`;
+    setSaveStatus('saving', 'Saving…');
+    const list = chosen.map(r => ({
+      id: uid(), company: r.company, date:'', billNo: r.billNo, retailer:'', totalAmount: r.amount,
+      deliveryDate:'', area:'', salesPerson: r.salesPerson, deliveryPartner:'', deliveryStatus:'Signed',
+      amountAtDelivery:'', comments:'', discount:'', nextVisitPlanned:'', verified:false,
+      visits: [{ id: uid(), date:'', assignedTo: r.salesPerson, status:'', amount:0, notes:'Loaded from signed bills list' }]
+    }));
+    if(sb){
+      for(let i = 0; i < list.length; i += 500){
+        const chunk = list.slice(i, i + 500);
+        const { error } = await sb.from('bills').insert(chunk.map(billToRow));
+        if(error) throw error;
+        added.push(...chunk);
+        const { error: vErr } = await sb.from('visits').insert(chunk.flatMap(b => b.visits.map(v => visitToRow(v, b.id))));
+        if(vErr) throw vErr;
+      }
+    } else added.push(...list);
+    bills = bills.concat(added);
+    const done = new Set(chosen);
+    slPending = slPending.filter(r => !done.has(r));
+    renderAll(); setSaveStatus('idle', 'Saved');
+    toast(`${added.length} signed bill${added.length===1?'':'s'} loaded.`);
+    if(!slPending.length) slDiscard();
+  }catch(err){
+    console.error(err);
+    if(added.length){ bills = bills.concat(added); renderAll(); }
+    setSaveStatus('idle', 'Load failed');
+    toast(added.length
+      ? `Stopped part-way: ${added.length} bills were saved. Press Load again for the rest (bill numbers already saved will be flagged and skipped).`
+      : 'Load failed — nothing was added. Check your connection and try again.');
+  }finally{
+    slLoading = false;
+    if(slPending.length){ slPending.forEach(r => { r._sig = r.sig; }); slRenderPreview(); }
+  }
+});
+
+/* ---------------- tab nav ---------------- */
+$$('#tabNav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#tabNav button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    $$('.tabview').forEach(v => v.classList.remove('active'));
+    $('#tab-' + btn.dataset.tab).classList.add('active');
+    renderAll();
+    if(btn.dataset.tab !== 'import') refreshIfStale();   // pick up what others have just done
+  });
+});
+
+/* ---------------- pagination helper ---------------- */
+const PAGE_SIZE = 60;
+const pageState = {};
+function paginate(list, key){
+  if(pageState[key] === undefined) pageState[key] = 0;
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  if(pageState[key] >= totalPages) pageState[key] = totalPages - 1;
+  const start = pageState[key] * PAGE_SIZE;
+  return { slice: list.slice(start, start+PAGE_SIZE), page: pageState[key], totalPages };
+}
+function renderPager(el, key, list, rerenderFn){
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  if(totalPages <= 1){ el.innerHTML=''; return; }
+  el.innerHTML = `
+    <button class="btn ghost sm" ${pageState[key]<=0?'disabled':''} id="${key}-prev">← Prev</button>
+    <span>Page ${pageState[key]+1} of ${totalPages} — ${list.length} rows</span>
+    <button class="btn ghost sm" ${pageState[key]>=totalPages-1?'disabled':''} id="${key}-next">Next →</button>
+  `;
+  $('#'+key+'-prev')?.addEventListener('click', () => { pageState[key]--; rerenderFn(); });
+  $('#'+key+'-next')?.addEventListener('click', () => { pageState[key]++; rerenderFn(); });
+}
+
+/* ============================================================
+   RENDER: Import tab summary
+   ============================================================ */
+function renderImportSummary(){
+  $('#totalCountText').textContent = `${bills.length} bill${bills.length===1?'':'s'} in the ledger`;
+}
+
+/* ============================================================
+   DRAG-FILL: click-drag the handle on Delivery Date, Area, Sales
+   Person, Delivery Partner or Delivery Status to copy that cell's
+   value down (or up) onto other rows, Excel-style.
+   ============================================================ */
+const FILL_FIELD_LABELS = {
+  deliveryDate: 'Delivery Date', area: 'Area', salesPerson: 'Sales Person',
+  deliveryPartner: 'Delivery Partner', deliveryStatus: 'Delivery Status'
+};
+
+document.addEventListener('mousedown', (e) => {
+  const handle = e.target.closest('.fill-handle');
+  if(!handle) return;
+  e.preventDefault();
+  const td = handle.closest('td.fill-col');
+  const tr = td?.closest('tr');
+  if(!td || !tr) return;
+  const field = td.dataset.fillField;
+  const bill = bills.find(b => b.id === tr.dataset.id);
+  if(!bill) return;
+  fillDrag = { field, sourceId: tr.dataset.id, value: bill[field] || '', order: deliveryRowOrder.slice(), rangeIds: [tr.dataset.id] };
+  tr.classList.add('fill-target');
+  document.body.style.userSelect = 'none';
+});
+
+document.addEventListener('mouseover', (e) => {
+  if(!fillDrag) return;
+  const td = e.target.closest('td.fill-col');
+  if(!td || td.dataset.fillField !== fillDrag.field) return;
+  const tr = td.closest('tr');
+  if(!tr) return;
+  const order = fillDrag.order;
+  const si = order.indexOf(fillDrag.sourceId), ti = order.indexOf(tr.dataset.id);
+  if(si < 0 || ti < 0) return;
+  const [lo, hi] = si <= ti ? [si, ti] : [ti, si];
+  fillDrag.rangeIds = order.slice(lo, hi + 1);
+  $$('#deliveryTableWrap tbody tr').forEach(row => {
+    row.classList.toggle('fill-target', fillDrag.rangeIds.includes(row.dataset.id));
+  });
+});
+
+document.addEventListener('mouseup', () => {
+  if(!fillDrag) return;
+  const { rangeIds, value, field } = fillDrag;
+  const changedBills = [];
+  rangeIds.forEach(id => {
+    const b = bills.find(x => x.id === id);
+    if(b && b[field] !== value){ b[field] = value; changedBills.push(b); }
+  });
+  fillDrag = null;
+  document.body.style.userSelect = '';
+  if(changedBills.length){
+    changedBills.forEach(b => scheduleSaveBill(b));
+    renderDelivery();
+    const label = FILL_FIELD_LABELS[field] || field;
+    toast(`Applied ${label} = "${value || '(blank)'}" to ${changedBills.length} row${changedBills.length===1?'':'s'}.`);
+  } else if(rangeIds.length){
+    $$('#deliveryTableWrap tbody tr').forEach(row => row.classList.remove('fill-target'));
+  }
+});
+
+/* ============================================================
+   RENDER: Delivery Details
+   ============================================================ */
+/* Extra Delivery Details filters, shared by the admin and staff views:
+   Billing date (from / to), Company, Sales person, Area. '' = all; '__none__' = no sales person. */
+const dlx = { billNo:'', billFrom:'', billTo:'', company:'', sales:'', area:'' };
+const dlxActive = () => Object.values(dlx).some(v => v);
+function dlxClear(){ Object.keys(dlx).forEach(k => { dlx[k] = ''; }); }
+function dlxBarHtml(){
+  return `<div class="row" style="margin-top:10px;">
+      <div><label>Bill number</label><input type="text" id="dlBillNo" placeholder="e.g. 3584" autocomplete="off" style="width:130px;"></div>
+      <div><label>Billing date from</label><input type="date" id="dlBillFrom"></div>
+      <div><label>Billing date to</label><input type="date" id="dlBillTo"></div>
+      <div><label>Company</label><select id="dlCompany" style="min-width:140px;"></select></div>
+      <div><label>Sales person</label><select id="dlSales" style="min-width:140px;"></select></div>
+      <div><label>Area</label><select id="dlArea" style="min-width:140px;"></select></div>
+    </div>`;
+}
+function dlxWire(rerender){
+  const map = { dlBillNo:'billNo', dlBillFrom:'billFrom', dlBillTo:'billTo', dlCompany:'company', dlSales:'sales', dlArea:'area' };
+  Object.keys(map).forEach(id => $('#' + id).addEventListener(id === 'dlBillNo' ? 'input' : 'change', e => { dlx[map[id]] = e.target.value; rerender(); }));   // bill number filters as you type
+}
+/* Fill the dropdowns from the bills in `list` (before any filtering) and keep the current choice */
+function dlxFill(list, salesExtra){
+  const uniq = arr => { const m = new Map(); arr.forEach(x => { const s = (x||'').trim(); if(s && !m.has(s.toLowerCase())) m.set(s.toLowerCase(), s); }); return [...m.values()].sort((a,b) => a.localeCompare(b)); };
+  const fill = (sel, values, current, extra) => {
+    const vals = values.slice();
+    if(current && current !== '__none__' && !vals.some(v => sameName(v, current))) vals.push(current);
+    sel.innerHTML = '<option value="">All</option>' + (extra||'') + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    sel.value = current;
+  };
+  fill($('#dlCompany'), uniq(list.map(b => b.company)), dlx.company);
+  fill($('#dlArea'), uniq(list.map(b => b.area)), dlx.area);
+  fill($('#dlSales'), uniq([...(salesExtra||[]), ...list.map(b => b.salesPerson)]), dlx.sales, '<option value="__none__">Unassigned</option>');
+  if($('#dlBillNo').value !== dlx.billNo) $('#dlBillNo').value = dlx.billNo;   // only when changed (e.g. Clear), so typing is not disturbed
+  $('#dlBillFrom').value = dlx.billFrom;
+  $('#dlBillTo').value = dlx.billTo;
+}
+function dlxApply(list){
+  return list.filter(b => {
+    if(dlx.billNo && !normKey(b.billNo).includes(normKey(dlx.billNo))) return false;
+    if(dlx.billFrom && (b.date||'') < dlx.billFrom) return false;
+    if(dlx.billTo && (b.date||'') > dlx.billTo) return false;
+    if(dlx.company && !sameName(b.company, dlx.company)) return false;
+    if(dlx.area && !sameName(b.area, dlx.area)) return false;
+    const sp = (b.salesPerson||'').trim();
+    if(dlx.sales === '__none__') return !sp;
+    if(dlx.sales && !sameName(sp, dlx.sales)) return false;
+    return true;
+  });
+}
+
+/* Voucher number sort: use the LAST run of digits ("NV-26-27-3584" -> 3584, "2907" -> 2907), highest first.
+   Vouchers with no digits go to the bottom. */
+function voucherKey(no){ const m = /(\d+)\D*$/.exec(String(no||'')); return m ? m[1].replace(/^0+(?=\d)/, '') : null; }
+function cmpVoucherDesc(a, b){
+  const ka = voucherKey(a.billNo), kb = voucherKey(b.billNo);
+  if(ka === null && kb !== null) return 1;
+  if(kb === null && ka !== null) return -1;
+  if(ka !== null && kb !== null && ka !== kb) return ka.length !== kb.length ? kb.length - ka.length : (ka < kb ? 1 : -1);
+  return (b.date||'').localeCompare(a.date||'') || String(b.billNo||'').localeCompare(String(a.billNo||''));
+}
+const SORT_NOTE = ' · sorted by voucher no., high to low';
+
+let adFilterDate = '', adFilterPartner = '';   // '' = all; '__none__' = unassigned
+function ensureAdminFilterBar(){
+  if($('#adFilterBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'adFilterBar'; bar.className = 'panel'; bar.style.cssText = 'padding:12px 16px; margin-bottom:12px;';
+  bar.innerHTML = `<div class="row">
+      <div><label>Delivery date</label><input type="date" id="adDateFilter"></div>
+      <div><label>Delivery partner</label><select id="adPartnerFilter" style="min-width:160px;"></select></div>
+      <button class="btn ghost sm" id="adToday" type="button">Today</button>
+      <button class="btn ghost sm" id="adClear" type="button">Clear filters</button>
+      <button class="btn ghost sm" id="adRefresh" type="button">Refresh</button>
+    </div>` + dlxBarHtml();
+  $('#deliveryTableWrap').before(bar);
+  const rerender = () => { pageState.delivery = 0; renderDelivery(); };
+  dlxWire(rerender);
+  $('#adDateFilter').addEventListener('change', e => { adFilterDate = e.target.value; rerender(); });
+  $('#adPartnerFilter').addEventListener('change', e => { adFilterPartner = e.target.value; rerender(); });
+  $('#adToday').addEventListener('click', () => { adFilterDate = todayLocalISO(); $('#adDateFilter').value = adFilterDate; rerender(); });
+  $('#adClear').addEventListener('click', () => { adFilterDate = ''; adFilterPartner = ''; dlxClear(); rerender(); });
+  $('#adRefresh').addEventListener('click', refreshNow);
+}
+function applyAdminDeliveryFilters(){
+  // partner list = known partners + any name already on a bill (capitals/spaces ignored)
+  const seen = new Map();
+  [...DELIVERY_PARTNER_OPTIONS, ...bills.map(b => (b.deliveryPartner||'').trim())]
+    .forEach(n => { if(n && !seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n); });
+  const sel = $('#adPartnerFilter');
+  sel.innerHTML = '<option value="">All</option><option value="__none__">Unassigned</option>' +
+    [...seen.values()].sort((a,b) => a.localeCompare(b)).map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  sel.value = adFilterPartner;
+  $('#adDateFilter').value = adFilterDate;
+  dlxFill(bills, SALES_PERSON_OPTIONS);
+  return dlxApply(bills).filter(b => {
+    if(adFilterDate && b.deliveryDate !== adFilterDate) return false;
+    const p = (b.deliveryPartner||'').trim().toLowerCase();
+    if(adFilterPartner === '__none__') return !p;
+    if(adFilterPartner) return p === adFilterPartner.toLowerCase();
+    return true;
+  });
+}
+
+function renderDelivery(){
+  if(isStaff()){ renderDeliveryPartnerView(); return; }
+  ensureAdminFilterBar();
+  const filtered = applyAdminDeliveryFilters();
+  $('#deliveryCount').textContent = (adFilterDate || adFilterPartner || dlxActive()) ? `${filtered.length} of ${bills.length} bills${SORT_NOTE}` : `${bills.length} bills`;
+  const adFiltering = !!(adFilterDate || adFilterPartner || dlxActive());
+  const sorted = adFiltering
+    ? [...filtered].sort(cmpVoucherDesc)    // filtering: highest voucher number first
+    : [...filtered].sort((a,b) => (a.date||'').localeCompare(b.date||'') || 0).reverse();
+  deliveryExportRows = sorted;
+  const {slice} = paginate(sorted, 'delivery');
+  deliveryRowOrder = slice.map(b => b.id);
+  const wrap = $('#deliveryTableWrap');
+
+  if(!filtered.length){
+    wrap.innerHTML = bills.length
+      ? emptyState('No bills match these filters', 'Change or clear the filters above.')
+      : emptyState('No bills yet', 'Import your sales register on the first tab to get started.');
+    $('#deliveryPager').innerHTML = '';
+    return;
+  }
+
+  const rows = slice.map(b => {
+    const idx = bills.indexOf(b);
+    return `<tr data-id="${b.id}"${dirty.has(b.id) ? ' class="dirty-row"' : ''}>
+      <td>${escapeHtml(b.company)}</td>
+      <td class="mono">${escapeHtml(b.date)}</td>
+      <td>${escapeHtml(b.billNo)}</td>
+      <td>${escapeHtml(b.retailer)}</td>
+      <td class="num mono">${fmtMoney(b.totalAmount)}</td>
+      <td class="fill-col" data-fill-field="deliveryDate"><div class="fillwrap"><input type="date" data-field="deliveryDate" value="${b.deliveryDate||''}"><span class="fill-handle" title="Drag down (or up) to copy this date onto other rows"></span></div></td>
+      <td class="fill-col" data-fill-field="area"><div class="fillwrap"><input type="text" data-field="area" value="${escapeHtml(b.area||'')}" style="min-width:100px;"><span class="fill-handle" title="Drag down (or up) to copy this Area onto other rows"></span></div></td>
+      <td class="fill-col" data-fill-field="salesPerson">
+        <div class="combo sp-combo">
+          <input type="text" class="combo-input" autocomplete="off" placeholder="Search…" value="${escapeHtml(b.salesPerson||'')}">
+          <div class="combo-list" hidden></div>
+          <span class="fill-handle" title="Drag down (or up) to copy this Sales Person onto other rows"></span>
+        </div>
+      </td>
+      <td class="fill-col" data-fill-field="deliveryPartner">
+        <div class="combo dp-combo">
+          <input type="text" class="combo-input" autocomplete="off" placeholder="Search…" value="${escapeHtml(b.deliveryPartner||'')}">
+          <div class="combo-list" hidden></div>
+          <span class="fill-handle" title="Drag down (or up) to copy this Delivery Partner onto other rows"></span>
+        </div>
+      </td>
+      <td class="fill-col" data-fill-field="deliveryStatus">
+        <div class="fillwrap">
+          <select data-field="deliveryStatus">
+            ${STATUS_OPTIONS.map(o=>`<option value="${o}" ${b.deliveryStatus===o?'selected':''}>${o||'—'}</option>`).join('')}
+          </select>
+          <span class="fill-handle" title="Drag down (or up) to copy this Delivery Status onto other rows"></span>
+        </div>
+      </td>
+      <td><input type="number" class="num" data-field="amountAtDelivery" value="${b.amountAtDelivery??''}" style="min-width:90px;"></td>
+      <td><input type="number" class="num" data-field="discount" value="${b.discount??''}" style="min-width:80px;"></td>
+      <td><input type="text" data-field="comments" value="${escapeHtml(b.comments||'')}" style="min-width:110px;"></td>
+      <td class="num mono">${fmtMoney(balanceOutstanding(b))}</td>
+      <td><button class="btn ghost sm" data-del="${b.id}">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Company</th><th>Billing date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th>
+      <th>Delivery Date</th><th>Area</th><th>Sales Person</th><th>Delivery Partner</th><th>Delivery Status</th>
+      <th class="num">Amount Collected</th><th class="num">Discount</th><th>Comments</th><th class="num">Balance</th><th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  wireEditableRows(wrap, sorted);
+  wireComboField(wrap, '.sp-combo', 'salesPerson', SALES_PERSON_OPTIONS, 'Sales Person');
+  wireComboField(wrap, '.dp-combo', 'deliveryPartner', deliveryPickOptions(), 'Delivery Partner');
+  renderPager($('#deliveryPager'), 'delivery', sorted, renderDelivery);
+}
+
+/* Delivery partner's own view: only bills assigned to them (the database enforces this too),
+   filterable by delivery date, with just four editable fields. Verified bills are locked. */
+let dpFilterDate = '';
+function todayLocalISO(){ const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function ensureDpFilterBar(){
+  if($('#dpFilterBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'dpFilterBar';
+  bar.className = 'panel';
+  bar.style.cssText = 'padding:12px 16px; margin-bottom:12px;';
+  bar.innerHTML = `<div class="row">
+      <div><label>Delivery date</label><input type="date" id="dpDateFilter"></div>
+      <button class="btn ghost sm" id="dpToday" type="button">Today</button>
+      <button class="btn ghost sm" id="dpAll" type="button">Show all</button>
+      <button class="btn ghost sm" id="dpRefresh" type="button">Refresh</button>
+    </div>` + dlxBarHtml();
+  $('#deliveryTableWrap').before(bar);
+  const apply = (v) => { dpFilterDate = v; $('#dpDateFilter').value = v; pageState.delivery = 0; renderDelivery(); };
+  dlxWire(() => { pageState.delivery = 0; renderDelivery(); });
+  $('#dpDateFilter').addEventListener('change', e => apply(e.target.value));
+  $('#dpToday').addEventListener('click', () => apply(todayLocalISO()));
+  $('#dpAll').addEventListener('click', () => { dlxClear(); apply(''); });
+  $('#dpRefresh').addEventListener('click', refreshNow);
+}
+function renderDeliveryPartnerView(){
+  ensureDpFilterBar();
+  const base = bills.filter(b => sameName(b.deliveryPartner, partnerName));   // bills I deliver (collection-only bills live in Signed Bills)
+  dlxFill(base);
+  const mine = dlxApply(base).filter(b => !dpFilterDate || b.deliveryDate === dpFilterDate)
+    .sort(cmpVoucherDesc);   // always highest voucher number first, so a bill is quick to find
+  deliveryExportRows = mine;
+  $('#deliveryCount').textContent = (dpFilterDate || dlxActive())
+    ? `${mine.length} of ${base.length} bills match your filters${SORT_NOTE}`
+    : `${base.length} bills assigned to you${SORT_NOTE}`;
+  const wrap = $('#deliveryTableWrap');
+  if(!mine.length){
+    wrap.innerHTML = base.length
+      ? emptyState('No bills match these filters', 'Change the filters, or press “Show all”.')
+      : emptyState('No bills assigned yet', 'Bills the office assigns to you will show up here.');
+    $('#deliveryPager').innerHTML = '';
+    return;
+  }
+  const {slice} = paginate(mine, 'delivery');
+  const rows = slice.map(b => { const lock = b.verified ? 'disabled' : ''; return `<tr data-id="${b.id}"${dirty.has(b.id) ? ' class="dirty-row"' : ''}>
+      <td>${escapeHtml(b.company)}</td>
+      <td class="mono">${escapeHtml(b.date)}</td>
+      <td>${escapeHtml(b.billNo)}</td>
+      <td>${escapeHtml(b.retailer)}</td>
+      <td class="num mono">${fmtMoney(b.totalAmount)}</td>
+      <td>${escapeHtml(b.area||'')}</td>
+      <td><input type="date" data-field="deliveryDate" value="${b.deliveryDate||''}" ${lock}></td>
+      <td><select data-field="deliveryStatus" ${lock}>${STATUS_OPTIONS.map(o=>`<option value="${o}" ${b.deliveryStatus===o?'selected':''}>${o||'—'}</option>`).join('')}</select></td>
+      <td><input type="number" class="num" data-field="amountAtDelivery" value="${b.amountAtDelivery??''}" style="min-width:90px;" ${lock}></td>
+      <td class="num mono">${b.discount===''?'':fmtMoney(b.discount)}</td>
+      <td><input type="text" data-field="comments" value="${escapeHtml(b.comments||'')}" style="min-width:110px;" ${lock}></td>
+      <td class="num mono">${fmtMoney(balanceOutstanding(b))}</td>
+      <td>${b.verified ? '<span class="badge settled">Verified ✓</span>' : ''}</td>
+    </tr>`; }).join('');
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Company</th><th>Billing date</th><th>Vch/Bill No</th><th>Retailer</th><th class="num">Total Amount</th><th>Area</th>
+      <th>Delivery Date</th><th>Delivery Status</th><th class="num">Amount Collected</th><th class="num">Discount</th><th>Comments</th><th class="num">Balance</th><th>Office check</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  wireEditableRows(wrap, mine);
+  renderPager($('#deliveryPager'), 'delivery', mine, renderDelivery);
+}
+
+function wireComboField(wrap, selectorClass, field, options, label){
+  $$(selectorClass, wrap).forEach(combo => {
+    const tr = combo.closest('tr');
+    const bill = bills.find(b => b.id === tr.dataset.id);
+    if(!bill) return;
+    const input = combo.querySelector('.combo-input');
+    const list = combo.querySelector('.combo-list');
+
+    function openList(filterText){
+      const f = (filterText||'').trim().toLowerCase();
+      const matches = options.filter(n => n.toLowerCase().includes(f));
+      list.innerHTML = matches.length
+        ? matches.map(n => `<div class="combo-opt" data-val="${escapeHtml(n)}">${escapeHtml(n)}</div>`).join('')
+        : `<div class="combo-empty">No match in the name list</div>`;
+      list.hidden = false;
+    }
+    function closeList(){ list.hidden = true; }
+    function commit(val){
+      bill[field] = val;
+      input.value = val;
+      input.classList.remove('invalid');
+      closeList();
+      scheduleSaveBill(bill);
+    }
+
+    input.addEventListener('focus', () => openList(input.value));
+    input.addEventListener('input', () => { input.classList.remove('invalid'); openList(input.value); });
+    input.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape'){ input.value = bill[field]||''; input.classList.remove('invalid'); closeList(); input.blur(); }
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        const exact = options.find(n => n.toLowerCase() === input.value.trim().toLowerCase());
+        if(exact) commit(exact);
+        else if(input.value.trim()==='') commit('');
+      }
+    });
+    list.addEventListener('mousedown', (e) => {
+      const opt = e.target.closest('.combo-opt');
+      if(!opt) return;
+      e.preventDefault();
+      commit(opt.dataset.val);
+    });
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        closeList();
+        const typed = input.value.trim();
+        const exact = options.find(n => n.toLowerCase() === typed.toLowerCase());
+        if(exact){ commit(exact); }
+        else if(typed === ''){ commit(''); }
+        else {
+          input.value = bill[field] || '';
+          toast(`"${typed}" isn't in the ${label} list — reverted.`);
+        }
+      }, 150);
+    });
+  });
+}
+
+function wireEditableRows(wrap, sourceList){
+  $$('tbody tr', wrap).forEach(tr => {
+    const id = tr.dataset.id;
+    const bill = bills.find(b => b.id === id);
+    if(!bill) return;
+    $$('[data-field]', tr).forEach(el => {
+      const field = el.dataset.field;
+      const numeric = el.type === 'number';
+      el.addEventListener(el.tagName==='SELECT' ? 'change' : 'input', () => {
+        bill[field] = numeric ? (el.value===''?'':toNum(el.value)) : el.value;
+        scheduleSaveBill(bill);
+      });
+      el.addEventListener(el.tagName==='SELECT' ? 'change' : 'blur', () => {
+        renderCurrentTab();
+      });
+    });
+    const delBtn = $('[data-del]', tr);
+    if(delBtn){
+      delBtn.addEventListener('click', () => {
+        if(!confirm('Delete this bill?')) return;
+        bills = bills.filter(b => b.id !== id);
+        deleteBillRemote(id);
+        renderAll();
+        toast('Bill deleted.');
+      });
+    }
+  });
+}
+
+/* ============================================================
+   RENDER: Signed Bills (with filters)
+   ============================================================ */
+let signedFilters = { billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
+let signedFiltersWired = false;
+
+function wireSignedFilters(){
+  if(signedFiltersWired) return;
+  signedFiltersWired = true;
+  const map = {
+    'f-billNo':'billNo', 'f-dateFrom':'dateFrom', 'f-dateTo':'dateTo',
+    'f-area':'area', 'f-company':'company', 'f-salesPerson':'salesPerson', 'f-balance':'balanceStatus'
+  };
+  Object.keys(map).forEach(id => {
+    const el = $('#'+id);
+    el.addEventListener(id === 'f-billNo' ? 'input' : 'change', () => { signedFilters[map[id]] = el.value; pageState['signed'] = 0; renderSigned(); });   // bill number filters as you type
+  });
+  $('#f-clear').addEventListener('click', () => {
+    signedFilters = { billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
+    pageState['signed'] = 0;
+    renderSigned();
+  });
+}
+
+function populateSelect(id, values, currentVal){
+  const el = $('#'+id);
+  const placeholder = el.options[0]; // keep the "All ..." option
+  el.innerHTML = '';
+  el.appendChild(placeholder);
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    if(v === currentVal) opt.selected = true;
+    el.appendChild(opt);
+  });
+  if(!values.includes(currentVal)) placeholder.selected = true;
+}
+
+function applySignedFilters(list){
+  const f = signedFilters;
+  return list.filter(b => {
+    if(f.billNo && !normKey(b.billNo).includes(normKey(f.billNo))) return false;
+    if(f.dateFrom && (b.date||'') < f.dateFrom) return false;
+    if(f.dateTo && (b.date||'') > f.dateTo) return false;
+    if(f.area && (b.area||'') !== f.area) return false;
+    if(f.company && (b.company||'') !== f.company) return false;
+    if(f.salesPerson && (b.salesPerson||'') !== f.salesPerson) return false;
+    if(f.balanceStatus === 'full' && balanceOutstanding(b) > 0) return false;
+    if(f.balanceStatus === 'pending' && balanceOutstanding(b) <= 0) return false;
+    return true;
+  });
+}
+
+const COL_COUNT_SIGNED = 14; // for the expanded detail row's colspan
+
+function renderSigned(){
+  wireSignedFilters();
+  const signed = bills.filter(b => (b.deliveryStatus||'').toLowerCase() === 'signed' && (!isStaff() || hasMyVisit(b)));   // staff: only bills with a collection visit assigned to them
+
+  // populate dropdown option lists from the full signed set (before filtering)
+  const areas = [...new Set(signed.map(b=>b.area).filter(Boolean))].sort();
+  const companies = [...new Set(signed.map(b=>b.company).filter(Boolean))].sort();
+  populateSelect('f-area', areas, signedFilters.area);
+  populateSelect('f-company', companies, signedFilters.company);
+  populateSelect('f-salesPerson', SALES_PERSON_OPTIONS, signedFilters.salesPerson);
+  $('#f-balance').value = signedFilters.balanceStatus;
+  if($('#f-billNo').value !== signedFilters.billNo) $('#f-billNo').value = signedFilters.billNo;
+  $('#f-dateFrom').value = signedFilters.dateFrom;
+  $('#f-dateTo').value = signedFilters.dateTo;
+
+  const filtered = applySignedFilters(signed);
+  const filtersActive = Object.values(signedFilters).some(v => v);
+  $('#signedCount').textContent = filtersActive
+    ? `${filtered.length} of ${signed.length} bills match your filters`
+    : `${signed.length} bills pending / followed up`;
+
+  // highest voucher number first, same rule as Delivery Details (last run of digits, so NV-26-27-3584 sorts as 3584)
+  const sorted = [...filtered].sort(cmpVoucherDesc);
+  signedExportRows = sorted;
+  const {slice} = paginate(sorted, 'signed');
+  const wrap = $('#signedTableWrap');
+
+  if(!signed.length){
+    wrap.innerHTML = emptyState('Nothing pending', 'Bills marked "Signed" in Delivery Details will appear here automatically.');
+    $('#signedPager').innerHTML = '';
+    return;
+  }
+  if(!filtered.length){
+    wrap.innerHTML = emptyState('No bills match these filters', 'Try clearing a filter or widening the date range.');
+    $('#signedPager').innerHTML = '';
+    return;
+  }
+
+  const rows = slice.map(b => {
+    const bal = balanceOutstanding(b);
+    const collected = totalCollected(b);
+    const visits = b.visits || [];
+    const expanded = expandedSignedIds.has(b.id);
+    const lastVisit = visits.length ? [...visits].sort((x,y)=>(x.date||'').localeCompare(y.date||''))[visits.length-1] : null;
+
+    const lockEdit = (isStaff() && b.verified) ? 'disabled' : '';   // the office has locked this bill for the partner
+    const mainRow = `<tr data-id="${b.id}"${dirty.has(b.id) ? ' class="dirty-row"' : ''}>
+      <td><input type="date" data-field="date" value="${escapeHtml(b.date||'')}" ${lockEdit}></td>
+      <td class="mono">${escapeHtml(b.deliveryDate)}</td>
+      <td>${escapeHtml(b.company)}</td>
+      <td>${escapeHtml(b.billNo)}</td>
+      <td><input type="text" data-field="retailer" value="${escapeHtml(b.retailer||'')}" placeholder="Add retailer" style="min-width:140px;" ${lockEdit}></td>
+      <td><input type="text" data-field="area" list="signedAreaList" value="${escapeHtml(b.area||'')}" placeholder="Add beat" style="min-width:100px;" ${lockEdit}></td>
+      <td>${escapeHtml(b.salesPerson||'')}</td>
+      <td>${escapeHtml(b.deliveryPartner||'')}</td>
+      <td class="num mono">${fmtMoney(b.totalAmount)}</td>
+      <td class="num mono">${fmtMoney(paidAtDeliveryPlusDiscount(b))}</td>
+      <td><input type="date" data-field="nextVisitPlanned" value="${b.nextVisitPlanned||''}"></td>
+      <td>
+        <button class="btn ghost sm" data-toggle-visits="${b.id}">
+          <div class="visit-toggle">
+            <span class="visit-summary">${visits.length
+              ? `<span class="cnt">${visits.length} visit${visits.length===1?'':'s'}</span><br><span class="last">last ${escapeHtml(lastVisit.date||'—')} · ${escapeHtml(lastVisit.status||'no status')}</span>`
+              : `<span class="none">No visits yet</span>`}</span>
+          </div>
+          ${expanded ? '▾' : '▸'}
+        </button>
+      </td>
+      <td class="num mono">${fmtMoney(collected)}</td>
+      <td class="num mono" style="color:${bal>0?'var(--brick)':'var(--green)'}; font-weight:600;">${fmtMoney(bal)}</td>
+    </tr>`;
+
+    const detailRow = expanded ? `<tr class="visit-log-row" data-detail-for="${b.id}">
+      <td colspan="${COL_COUNT_SIGNED}">${renderVisitLogPanel(b)}</td>
+    </tr>` : '';
+
+    return mainRow + detailRow;
+  }).join('');
+
+  wrap.innerHTML = `<datalist id="signedAreaList">${areas.map(a => `<option value="${escapeHtml(a)}">`).join('')}</datalist><table>
+    <thead><tr>
+      <th>Date</th><th>Delivery Date</th><th>Company</th><th>Vch/Bill No</th><th>Retailer</th><th>Area / Beat</th><th>Sales Person</th><th>Delivery Partner</th>
+      <th class="num">Bill Amount</th><th class="num">Paid at Delivery+Discount</th><th>Next Visit Planned</th><th>Collection Visits</th>
+      <th class="num">Total Collected</th><th class="num">Balance Outstanding</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  wireEditableRows(wrap, sorted);
+  $$('[data-toggle-visits]', wrap).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.toggleVisits;
+      if(expandedSignedIds.has(id)) expandedSignedIds.delete(id);
+      else expandedSignedIds.add(id);
+      renderSigned();
+    });
+  });
+  $$('[data-detail-for]', wrap).forEach(tr => {
+    const bill = bills.find(b => b.id === tr.dataset.detailFor);
+    if(bill) wireVisitLogPanel(tr, bill);
+  });
+  renderPager($('#signedPager'), 'signed', sorted, renderSigned);
+}
+
+/* ---- visit log: one open-ended collection-attempt history per bill ---- */
+function renderVisitLogPanel(bill){
+  const staff = isStaff();
+  const visits = [...(bill.visits||[])].sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const statusOpts = sel => COLLECTION_STATUS_OPTIONS.map(o=>`<option value="${o}" ${sel===o?'selected':''}>${o||'—'}</option>`).join('');
+  const rowHtml = v => {
+    if(staff && !sameName(v.assignedTo, partnerName)){      // someone else's visit: visible so balances add up, but read-only
+      return `<tr data-visit-id="${v.id}">
+        <td class="mono">${escapeHtml(v.date||'')}</td><td>${escapeHtml(v.assignedTo||'')}</td><td>${escapeHtml(v.status||'—')}</td>
+        <td class="num mono">${fmtMoney(v.amount)}</td><td>${escapeHtml(v.notes||'')}</td><td><span class="footnote">someone else's visit</span></td></tr>`;
+    }
+    return `<tr data-visit-id="${v.id}">
+      <td><input type="date" class="ve-date" value="${v.date||''}"></td>
+      <td>${staff ? escapeHtml(v.assignedTo||'') : `<select class="ve-assigned">
+            <option value="">— choose —</option>
+            ${ASSIGNED_FOR_OPTIONS.map(n=>`<option value="${escapeHtml(n)}" ${v.assignedTo===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}
+          </select>`}</td>
+      <td><select class="ve-status">${statusOpts(v.status)}</select></td>
+      <td><input type="number" class="num ve-amount" value="${v.amount??''}" style="min-width:90px;"></td>
+      <td><input type="text" class="ve-notes" value="${escapeHtml(v.notes||'')}" style="min-width:130px;"></td>
+      <td style="white-space:nowrap;">
+        <button class="btn primary sm" data-save-visit="${v.id}">Save</button>
+        ${staff ? '' : `<button class="btn ghost sm" data-del-visit="${v.id}">✕</button>`}
+      </td>
+    </tr>`;
+  };
+  const table = visits.length ? `<table class="visit-table">
+    <thead><tr><th>Date</th><th>Assigned To</th><th>Status</th><th class="num">Amount Collected</th><th>Notes</th><th></th></tr></thead>
+    <tbody>${visits.map(rowHtml).join('')}</tbody>
+  </table>` : `<div class="visit-empty-note">No collection attempts logged yet for this bill — add the first one below.</div>`;
+
+  return `${table}
+    <div class="visit-add-form">
+      <div><label>Date</label><input type="date" class="va-date"></div>
+      <div><label>Assigned To</label>
+        ${staff ? `<div style="padding:9px 0; font-weight:600;">${escapeHtml(partnerName)}</div>` : `<select class="va-assigned">
+          <option value="">— choose —</option>
+          ${ASSIGNED_FOR_OPTIONS.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+        </select>`}
+      </div>
+      <div><label>Status</label>
+        <select class="va-status">${COLLECTION_STATUS_OPTIONS.map(o=>`<option value="${o}">${o||'—'}</option>`).join('')}</select>
+      </div>
+      <div><label>Amount Collected</label><input type="number" class="num va-amount" placeholder="0"></div>
+      <div style="flex:1; min-width:160px;"><label>Notes</label><input type="text" class="va-notes" placeholder="e.g. shop closed, promised Friday"></div>
+      <div><button class="btn primary sm" data-add-visit="${bill.id}">+ Add visit</button></div>
+    </div>`;
+}
+
+function wireVisitLogPanel(tr, bill){
+  $$('[data-del-visit]', tr).forEach(btn => {
+    btn.addEventListener('click', () => {
+      if(!confirm('Delete this visit entry?')) return;
+      const visitId = btn.dataset.delVisit;
+      bill.visits = (bill.visits||[]).filter(v => v.id !== visitId);
+      deleteVisitRemote(visitId);
+      renderSigned();
+      toast('Visit entry deleted.');
+    });
+  });
+  $$('[data-save-visit]', tr).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const visitId = btn.dataset.saveVisit;
+      const row = btn.closest('tr');
+      const visit = (bill.visits||[]).find(v => v.id === visitId);
+      if(!visit || !row) return;
+      visit.date = $('.ve-date', row).value;
+      const asg = $('.ve-assigned', row); if(asg) visit.assignedTo = asg.value;   // staff cannot hand a visit to someone else
+      visit.status = $('.ve-status', row).value;
+      visit.amount = toNum($('.ve-amount', row).value);
+      visit.notes = $('.ve-notes', row).value.trim();
+      scheduleSaveVisit(visit, bill.id);
+      renderSigned();
+      toast('Visit updated.');
+    });
+  });
+  const addBtn = $('[data-add-visit]', tr);
+  if(addBtn){
+    addBtn.addEventListener('click', () => {
+      const date = $('.va-date', tr).value;
+      const assignedTo = isStaff() ? partnerName : $('.va-assigned', tr).value;
+      const status = $('.va-status', tr).value;
+      const amount = toNum($('.va-amount', tr).value);
+      const notes = $('.va-notes', tr).value.trim();
+      if(!date && (isStaff() || !assignedTo) && !status && !amount && !notes){
+        toast('Fill in at least one field before adding a visit.');
+        return;
+      }
+      const newVisit = { id: uid(), date, assignedTo, status, amount, notes };
+      bill.visits = bill.visits || [];
+      bill.visits.push(newVisit);
+      expandedSignedIds.add(bill.id);
+      insertVisitRemote(newVisit, bill.id);
+      renderSigned();
+      toast('Visit added.');
+    });
+  }
+}
+
+/* ============================================================
+   RENDER: Daily Agent Report
+   ============================================================ */
+const agentExpanded = new Set();   // delivery partners whose bill list is open in the Daily Agent Report
+
+/* Verify = lock bills so the delivery partner can't edit them any more (enforced by the database).
+   Before locking, re-read those bills: if the partner changed something after this page loaded,
+   refresh instead, so you never verify numbers you haven't seen. */
+async function setVerified(ids, value){
+  if(!sb || !ids.length) return;
+  if(value && dirty.size){ toast('You have unsaved changes — press Save changes first, then verify.'); return; }
+  setSaveStatus('saving', 'Saving…');
+  const chunks = []; for(let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+  if(value){
+    const fresh = [];
+    for(const c of chunks){
+      const { data, error: fe } = await sb.from('bills')
+        .select('id,delivery_date,delivery_status,amount_at_delivery,comments').in('id', c);
+      if(fe){ toast('Could not check the bills — ' + fe.message); setSaveStatus('idle', 'Failed'); return; }
+      fresh.push(...data);
+    }
+    const changed = fresh.some(r => {
+      const b = bills.find(x => x.id === r.id); if(!b) return false;
+      const row = billToRow(b);
+      return ['delivery_date','delivery_status','amount_at_delivery','comments'].some(k => (row[k] ?? null) !== (r[k] ?? null));
+    });
+    if(changed){
+      await loadData();
+      toast('The delivery partner changed some of these bills after you opened the page. Refreshed — please review and verify again.');
+      return;
+    }
+  }
+  const { data: { session } } = await sb.auth.getSession();
+  const patch = value
+    ? { verified: true, verified_at: new Date().toISOString(), verified_by: session?.user?.id ?? null }
+    : { verified: false, verified_at: null, verified_by: null };
+  for(const c of chunks){
+    const { error } = await sb.from('bills').update(patch).in('id', c);
+    if(error){ console.error(error); toast('Could not update verification — ' + error.message); setSaveStatus('idle', 'Failed'); return; }
+  }
+  bills.forEach(b => { if(ids.includes(b.id)) b.verified = value; });
+  setSaveStatus('idle', 'Saved');
+  toast(value ? `${ids.length} bill${ids.length===1?'':'s'} verified and locked.` : 'Verification removed — the partner can edit again.');
+  renderAgent();
+}
+
+function renderAgent(){
+  const dateInput = $('#agentDateInput');
+  if(!dateInput._wired){
+    dateInput.addEventListener('change', renderAgent);
+    $('#agentRefreshBtn').addEventListener('click', refreshNow);
+    $('#agentPartnerWrap').addEventListener('click', (e) => {
+      const btn = e.target.closest('button'); if(!btn) return;
+      const d = btn.dataset;
+      if(d.expand !== undefined){
+        agentExpanded.has(d.expand) ? agentExpanded.delete(d.expand) : agentExpanded.add(d.expand);
+        renderAgent();
+      } else if(d.verify){ setVerified([d.verify], true); }
+      else if(d.unverify){
+        if(confirm('Remove verification? The delivery partner will be able to edit this bill again.')) setVerified([d.unverify], false);
+      } else if(d.verifyAll !== undefined){
+        const date = $('#agentDateInput').value;
+        const ids = bills.filter(b => (b.deliveryPartner||'').trim() === d.verifyAll && b.deliveryDate === date && !b.verified).map(b => b.id);
+        if(ids.length && confirm(`Verify ${ids.length} bill${ids.length===1?'':'s'} for ${d.verifyAll}? They will no longer be able to edit them.`)) setVerified(ids, true);
+      }
+    });
+    dateInput._wired = true;
+  }
+  if(!dateInput.value){
+    const dates = bills.map(b=>b.deliveryDate).filter(Boolean).sort();
+    dateInput.value = dates.length ? dates[dates.length-1] : new Date().toISOString().slice(0,10);
+  }
+  const selDate = dateInput.value;
+  const dayBills = bills.filter(b => b.deliveryDate === selDate);
+  $('#agentDateHint').textContent = dayBills.length ? `${dayBills.length} bills delivered on this date` : 'No deliveries recorded for this date';
+
+  function groupBy(field, optionList){
+    const groups = {};
+    function ensure(key){
+      if(!groups[key]) groups[key] = {cash:0,cashCount:0,bank:0,signedCount:0,totalValue:0,totalBills:0};
+      return groups[key];
+    }
+    dayBills.forEach(b => {
+      const key = (b[field]||'').trim();
+      if(!key) return;
+      const g = ensure(key);
+      const status = (b.deliveryStatus||'').toLowerCase();
+      g.totalValue += toNum(b.totalAmount);
+      g.totalBills += 1;
+      if(status==='signed') g.signedCount++;
+      // Money collected AT delivery goes in the delivery partner's hands, not
+      // the sales person's — only credit it here for the Delivery Partner table.
+      if(field === 'deliveryPartner'){
+        if(status==='cash'){ g.cash += toNum(b.amountAtDelivery); g.cashCount++; }
+        // Signed bill with an amount entered = the partner received that much cash at the door
+        // (the rest stays pending). It counts as cash collected, though the bill is still a Signed bill.
+        if(status==='signed'){ g.cash += toNum(b.amountAtDelivery); }
+        if(status==='upi/bank' || status==='cheque'){ g.bank += toNum(b.amountAtDelivery); }
+      }
+    });
+    // Follow-up collections logged against Signed Bills, dated today, credited
+    // to whoever that specific visit was assigned to — this can legitimately be
+    // a sales person if they're the one who actually went and collected.
+    bills.forEach(b => {
+      if((b.deliveryStatus||'').toLowerCase() !== 'signed') return;
+      (b.visits||[]).forEach(v => {
+        if(v.date !== selDate) return;
+        const who = (v.assignedTo||'').trim();
+        if(!who || !optionList.includes(who)) return;
+        const g = ensure(who);
+        if(v.status === 'Collected- Cash') g.cash += toNum(v.amount);
+        else if(v.status === 'Collected- Bank') g.bank += toNum(v.amount);
+      });
+    });
+    return groups;
+  }
+
+  function renderPartnerDetail(name, pBills){
+    const unverified = pBills.filter(b => !b.verified);
+    const noDate = bills.filter(b => (b.deliveryPartner||'').trim() === name && !b.deliveryDate).length;
+    const body = [...pBills].sort(cmpVoucherDesc).map(b => `<tr>
+        <td>${escapeHtml(b.billNo)}</td><td>${escapeHtml(b.retailer)}</td>
+        <td class="num mono">${fmtMoney(b.totalAmount)}</td>
+        <td>${b.deliveryStatus ? `<span class="badge ${badgeClass(b.deliveryStatus)}">${escapeHtml(b.deliveryStatus)}</span>` : '<span class="footnote">not updated</span>'}</td>
+        <td class="num mono">${b.amountAtDelivery === '' ? '—' : fmtMoney(b.amountAtDelivery)}</td>
+        <td class="num mono">${b.discount === '' ? '—' : fmtMoney(b.discount)}</td>
+        <td class="num mono">${fmtMoney(balanceOutstanding(b))}</td>
+        <td>${escapeHtml(b.comments||'')}</td>
+        <td style="white-space:nowrap;">${b.verified
+          ? `<span class="badge settled">Verified ✓</span> <button class="btn ghost sm" data-unverify="${b.id}">Undo</button>`
+          : `<button class="btn primary sm" data-verify="${b.id}">Verify</button>`}</td>
+      </tr>`).join('');
+    const table = pBills.length ? `<div style="overflow-x:auto;"><table>
+        <thead><tr><th>Bill No</th><th>Retailer</th><th class="num">Total</th><th>Status</th><th class="num">Collected</th><th class="num">Discount</th><th class="num">Balance</th><th>Comments</th><th>Office check</th></tr></thead>
+        <tbody>${body}</tbody></table></div>`
+      : `<div class="footnote">No bills for ${escapeHtml(name)} on this date.</div>`;
+    return `<tr><td colspan="9" style="background:#faf8f2; padding:12px 16px;">
+      <div class="flex-between" style="margin-bottom:8px;">
+        <strong>${escapeHtml(name)} — bills for ${escapeHtml(selDate)}</strong> <span class="footnote">· sorted by voucher no., high to low</span>
+        ${unverified.length ? `<button class="btn primary sm" data-verify-all="${escapeHtml(name)}">Verify all (${unverified.length})</button>` : (pBills.length ? '<span class="badge settled">All verified ✓</span>' : '')}
+      </div>
+      ${table}
+      <div class="footnote">Verifying locks a bill: the delivery partner can no longer edit it. “Undo” unlocks it.${noDate ? ` ${noDate} bill${noDate===1?'':'s'} assigned to ${escapeHtml(name)} ${noDate===1?'has':'have'} no delivery date yet and ${noDate===1?'isn\'t':'aren\'t'} listed here.` : ''}</div>
+    </td></tr>`;
+  }
+
+  function renderGroupTable(groups, label, expandable){
+    const keys = Object.keys(groups).sort();
+    if(!keys.length) return emptyState('Nothing to show', `No ${label.toLowerCase()} activity on this date.`);
+    let totals = {cash:0,cashCount:0,bank:0,signedCount:0,totalValue:0,totalBills:0};
+    const rows = keys.map(k => {
+      const g = groups[k];
+      Object.keys(totals).forEach(t => totals[t]+=g[t]);
+      let extraHead = '', extraTail = '', detail = '';
+      if(expandable){
+        const pBills = dayBills.filter(b => (b.deliveryPartner||'').trim() === k);
+        const done = pBills.filter(b => b.verified).length;
+        const open = agentExpanded.has(k);
+        extraHead = `<td><button class="btn ghost sm" data-expand="${escapeHtml(k)}" title="Show the bills">${open ? '▾' : '▸'}</button></td>`;
+        extraTail = `<td>${pBills.length ? `<span class="badge ${done===pBills.length ? 'settled' : 'pending'}">${done}/${pBills.length} verified</span>` : ''}</td>`;
+        if(open) detail = renderPartnerDetail(k, pBills);
+      }
+      return `<tr>${extraHead}<td>${escapeHtml(k)}</td>
+        <td class="num mono">${fmtMoney(g.cash)}</td><td class="num mono">${g.cashCount}</td>
+        <td class="num mono">${fmtMoney(g.bank)}</td><td class="num mono">${g.signedCount}</td>
+        <td class="num mono">${fmtMoney(g.totalValue)}</td><td class="num mono">${g.totalBills}</td>${extraTail}</tr>${detail}`;
+    }).join('');
+    return `<table>
+      <thead><tr>${expandable ? '<th></th>' : ''}<th>${label}</th><th class="num">Cash Collected</th><th class="num">Cash Bills</th>
+      <th class="num">Bank/UPI Collected</th><th class="num">Signed Bills</th><th class="num">Total Value</th><th class="num">Total Bills</th>${expandable ? '<th>Office check</th>' : ''}</tr></thead>
+      <tbody>${rows}
+      <tr style="font-weight:700; background:#f1efe7;">${expandable ? '<td></td>' : ''}<td>TOTAL</td>
+        <td class="num mono">${fmtMoney(totals.cash)}</td><td class="num mono">${totals.cashCount}</td>
+        <td class="num mono">${fmtMoney(totals.bank)}</td><td class="num mono">${totals.signedCount}</td>
+        <td class="num mono">${fmtMoney(totals.totalValue)}</td><td class="num mono">${totals.totalBills}</td>${expandable ? '<td></td>' : ''}</tr>
+      </tbody></table>`;
+  }
+
+  const partnerGroups = groupBy('deliveryPartner', DELIVERY_PARTNER_OPTIONS);
+  const salesGroups = groupBy('salesPerson', SALES_PERSON_OPTIONS);
+  agentExport = { selDate, dayBills, partnerGroups, salesGroups };
+  $('#agentPartnerWrap').innerHTML = renderGroupTable(partnerGroups, 'Delivery Partner', true);
+  $('#agentSalesWrap').innerHTML = renderGroupTable(salesGroups, 'Sales Person');
+}
+
+/* ============================================================
+   RENDER: Settlement Summary
+   ============================================================ */
+function renderSettlement(){
+  const total = bills.length;
+  const totalValue = bills.reduce((s,b)=>s+toNum(b.totalAmount),0);
+  const cancelled = bills.filter(b=>(b.deliveryStatus||'').toLowerCase()==='cancelled');
+  const cancelledValue = cancelled.reduce((s,b)=>s+toNum(b.totalAmount),0);
+  const settledOnDelivery = bills.filter(b=>['cash','upi/bank','cheque'].includes((b.deliveryStatus||'').toLowerCase()));
+  const settledValue = settledOnDelivery.reduce((s,b)=>s+toNum(b.amountAtDelivery),0);
+  const signedBills = bills.filter(b=>(b.deliveryStatus||'').toLowerCase()==='signed');
+  const signedValue = signedBills.reduce((s,b)=>s+toNum(b.totalAmount),0);
+  const partialPaidAtDelivery = signedBills.reduce((s,b)=>s+paidAtDeliveryPlusDiscount(b),0);
+  const additionalCollected = signedBills.reduce((s,b)=>s+followUpCollected(b),0);
+  const totalCollectedFromSigned = partialPaidAtDelivery + additionalCollected;
+  const stillOutstanding = signedBills.reduce((s,b)=>s+balanceOutstanding(b),0);
+  const grandTotalCollected = settledValue + totalCollectedFromSigned;
+  const outstandingNow = bills.reduce((s,b)=>s+Math.max(0,balanceOutstanding(b)),0);
+  const billable = total - cancelled.length;
+  const collectionRate = billable>0 ? (grandTotalCollected / (totalValue - cancelledValue) * 100) : 0;
+
+  const kpis = [
+    ['Total Bills Delivered', total, 'teal', ''],
+    ['Total Value Billed', fmtMoney(totalValue), 'teal', ''],
+    ['Cancelled Bills', cancelled.length, 'brick', fmtMoney(cancelledValue)+' value'],
+    ['Settled on Delivery', fmtMoney(settledValue), 'green', 'Cash / UPI / Bank / Cheque'],
+    ['Signed — Bill Value', fmtMoney(signedValue), 'amber', signedBills.length+' bills'],
+    ['Collected from Signed', fmtMoney(totalCollectedFromSigned), 'green', 'partial + follow-up'],
+    ['Outstanding (Signed)', fmtMoney(stillOutstanding), 'brick', ''],
+    ['Grand Total Collected', fmtMoney(grandTotalCollected), 'teal', ''],
+    ['Outstanding Now', fmtMoney(outstandingNow), 'brick', 'all bills'],
+    ['Collection Rate', (isFinite(collectionRate)?collectionRate.toFixed(1):'0.0')+'%', 'green', 'excl. cancelled'],
+  ];
+  $('#settlementKpis').innerHTML = kpis.map(([label,val,accent,sub]) => `
+    <div class="kpi accent-${accent}"><div class="label">${label}</div><div class="value">${val}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>
+  `).join('');
+
+  // breakdown by delivery partner
+  const partners = {};
+  bills.forEach(b => {
+    const key = (b.deliveryPartner||'Unassigned').trim() || 'Unassigned';
+    if(!partners[key]) partners[key] = {bills:0,value:0,collected:0,outstanding:0};
+    partners[key].bills++;
+    partners[key].value += toNum(b.totalAmount);
+    partners[key].collected += totalCollected(b);
+    partners[key].outstanding += Math.max(0,balanceOutstanding(b));
+  });
+  const pKeys = Object.keys(partners).sort();
+  $('#settlementPartnerWrap').innerHTML = !pKeys.length ? emptyState('No data yet','') : `<table>
+    <thead><tr><th>Delivery Partner</th><th class="num">Bills</th><th class="num">Value Delivered</th><th class="num">Collected</th><th class="num">Outstanding</th></tr></thead>
+    <tbody>${pKeys.map(k=>{
+      const p = partners[k];
+      return `<tr><td>${escapeHtml(k)}</td><td class="num mono">${p.bills}</td><td class="num mono">${fmtMoney(p.value)}</td><td class="num mono">${fmtMoney(p.collected)}</td><td class="num mono" style="color:${p.outstanding>0?'var(--brick)':'inherit'}">${fmtMoney(p.outstanding)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+
+  // merged register
+  const sorted = [...bills].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const {slice} = paginate(sorted, 'settlement');
+  const wrap = $('#settlementRegisterWrap');
+  if(!sorted.length){
+    wrap.innerHTML = emptyState('No bills yet','');
+    $('#settlementPager').innerHTML='';
+  } else {
+    wrap.innerHTML = `<table>
+      <thead><tr><th>Delivery Date</th><th>Company</th><th>Vch/Bill No</th><th>Retailer</th><th>Delivery Partner</th>
+      <th>Delivery Status</th><th class="num">Bill Amount</th><th class="num">Collected</th><th class="num">Outstanding</th><th>Settlement Status</th></tr></thead>
+      <tbody>${slice.map(b=>{
+        const st = settlementStatus(b);
+        return `<tr><td class="mono">${escapeHtml(b.deliveryDate||'')}</td><td>${escapeHtml(b.company)}</td><td>${escapeHtml(b.billNo)}</td>
+          <td>${escapeHtml(b.retailer)}</td><td>${escapeHtml(b.deliveryPartner||'')}</td>
+          <td><span class="badge ${statusBadgeClass(b.deliveryStatus)}">${escapeHtml(b.deliveryStatus||'—')}</span></td>
+          <td class="num mono">${fmtMoney(b.totalAmount)}</td><td class="num mono">${fmtMoney(totalCollected(b))}</td>
+          <td class="num mono">${fmtMoney(balanceOutstanding(b))}</td>
+          <td><span class="badge ${badgeClass(st)}">${st}</span></td></tr>`;
+      }).join('')}</tbody></table>`;
+    renderPager($('#settlementPager'), 'settlement', sorted, renderSettlement);
+  }
+}
+
+/* ============================================================
+   RENDER: Cash Collection by Date
+   ============================================================ */
+function renderCash(){
+  const byDate = {};
+  function ensure(d){
+    if(!byDate[d]) byDate[d] = {
+      cashOnDelivery:0, cashBillsCount:0, cashFollowUp:0, cashFollowUpCount:0,
+      bankOnDelivery:0, bankBillsCount:0, bankFollowUp:0, bankFollowUpCount:0
+    };
+    return byDate[d];
+  }
+  bills.forEach(b => {
+    const status = (b.deliveryStatus||'').toLowerCase();
+    if(status === 'cash' && b.deliveryDate){
+      const r = ensure(b.deliveryDate);
+      r.cashOnDelivery += toNum(b.amountAtDelivery);
+      r.cashBillsCount++;
+    }
+    if((status === 'upi/bank' || status === 'cheque') && b.deliveryDate){
+      const r = ensure(b.deliveryDate);
+      r.bankOnDelivery += toNum(b.amountAtDelivery);
+      r.bankBillsCount++;
+    }
+    if(status === 'signed' && b.deliveryDate && toNum(b.amountAtDelivery) > 0){
+      ensure(b.deliveryDate).cashOnDelivery += toNum(b.amountAtDelivery);   // cash received at the door on a signed bill
+    }
+    if(status === 'signed'){
+      (b.visits||[]).forEach(v => {
+        if(!v.date || toNum(v.amount) <= 0) return;
+        if(v.status === 'Collected- Cash'){
+          const r = ensure(v.date);
+          r.cashFollowUp += toNum(v.amount);
+          r.cashFollowUpCount++;
+        } else if(v.status === 'Collected- Bank'){
+          const r = ensure(v.date);
+          r.bankFollowUp += toNum(v.amount);
+          r.bankFollowUpCount++;
+        }
+      });
+    }
+  });
+  const dates = Object.keys(byDate).sort();
+  const wrap = $('#cashTableWrap');
+  if(!dates.length){
+    wrap.innerHTML = emptyState('Nothing collected yet', 'Mark bills as Cash or UPI/Bank in Delivery Details, or log a collected visit in Signed Bills, to see them here.');
+    return;
+  }
+  let grandCash = 0, grandBank = 0;
+  const rows = dates.map(d => {
+    const r = byDate[d];
+    const totCash = r.cashOnDelivery + r.cashFollowUp;
+    const totBank = r.bankOnDelivery + r.bankFollowUp;
+    grandCash += totCash; grandBank += totBank;
+    return `<tr><td class="mono">${d}</td>
+      <td class="num mono">${fmtMoney(r.cashOnDelivery)}</td>
+      <td class="num mono">${fmtMoney(r.cashFollowUp)}</td>
+      <td class="num mono" style="font-weight:600;">${fmtMoney(totCash)}</td>
+      <td class="num mono">${fmtMoney(r.bankOnDelivery)}</td>
+      <td class="num mono">${fmtMoney(r.bankFollowUp)}</td>
+      <td class="num mono" style="font-weight:600;">${fmtMoney(totBank)}</td>
+      <td class="num mono" style="font-weight:700;">${fmtMoney(totCash+totBank)}</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Date</th>
+      <th class="num">Cash on Delivery</th>
+      <th class="num">Cash via Follow-up</th>
+      <th class="num">Total Cash</th>
+      <th class="num">Bank/UPI on Delivery</th>
+      <th class="num">Bank/UPI via Follow-up</th>
+      <th class="num">Total Bank/UPI</th>
+      <th class="num">Grand Total</th>
+    </tr></thead>
+    <tbody>${rows}<tr style="font-weight:700;background:#f1efe7;">
+      <td colspan="3">GRAND TOTAL</td><td class="num mono">${fmtMoney(grandCash)}</td>
+      <td colspan="2"></td><td class="num mono">${fmtMoney(grandBank)}</td>
+      <td class="num mono">${fmtMoney(grandCash+grandBank)}</td>
+    </tr></tbody>
+  </table>`;
+}
+
+/* ---------------- shared ---------------- */
+function emptyState(big, small){
+  return `<div class="empty-state"><div class="mark2"></div><div class="big">${big}</div><div>${small}</div></div>`;
+}
+
+function renderCurrentTab(){
+  const active = $('#tabNav button.active')?.dataset.tab;
+  renderTab(active);
+}
+function renderTab(name){
+  if(name==='import') renderImportSummary();
+  else if(name==='delivery') renderDelivery();
+  else if(name==='signed') renderSigned();
+  else if(name==='agent') renderAgent();
+  else if(name==='settlement') renderSettlement();
+  else if(name==='cash') renderCash();
+}
+function renderAll(){
+  renderImportSummary();
+  renderTab($('#tabNav button.active')?.dataset.tab || 'import');
+}
+
+/* ---------------- auth gate (Supabase Auth) ---------------- */
+function showAuthGate(){
+  $('#authGate').style.display = 'flex';
+  $('header.app').style.display = 'none';
+  $('main').style.display = 'none';
+}
+function hideAuthGate(){
+  $('#authGate').style.display = 'none';
+  $('header.app').style.display = '';
+  $('main').style.display = '';
+}
+
+/* Only accounts listed in user_roles (admin or an active delivery partner) get in.
+   Anyone else is signed straight back out. */
+async function enterApp(session){
+  if(enteredFor === session.user.id) return;
+  const { data: roleRow, error } = await sb.from('user_roles')
+    .select('role,name,active').eq('user_id', session.user.id).maybeSingle();
+  if(error || !roleRow || !roleRow.active || !['admin','delivery','sales'].includes(roleRow.role)){
+    await sb.auth.signOut();
+    const errEl = $('#loginError');
+    errEl.textContent = 'This account does not have access. Please contact the administrator.';
+    errEl.hidden = false;
+    return;
+  }
+  enteredFor = session.user.id;
+  userRole = roleRow.role;
+  partnerName = roleRow.name || '';
+  applyRoleUI();
+  hideAuthGate();
+  loadData();
+}
+
+function applyRoleUI(){
+  if(!isStaff()) return;
+  // Delivery partners and sales persons get two tabs: Delivery Details and Signed Bills
+  const allowed = ['delivery', 'signed'];
+  $$('#tabNav button').forEach(b => {
+    const ok = allowed.includes(b.dataset.tab);
+    b.style.display = ok ? '' : 'none';
+    b.classList.toggle('active', b.dataset.tab === 'delivery');
+  });
+  $$('.tabview').forEach(v => v.classList.toggle('active', v.id === 'tab-delivery'));
+  $('#backupBtn').style.display = 'none';
+  const sl = $('#signedLoader'); if(sl) sl.style.display = 'none';   // only the office loads signed bills
+  const title = $('#tab-delivery .section-title');
+  if(title) title.textContent = 'My deliveries' + (partnerName ? ' — ' + partnerName : '');
+  const hint = $('#tab-delivery .helptext');
+  if(hint) hint.textContent = 'These are the bills assigned to you for delivery. Update the delivery date, status, amount collected and comments as you deliver.';
+  const sTitle = $('#tab-signed .section-title');
+  if(sTitle) sTitle.textContent = 'My collections' + (partnerName ? ' — ' + partnerName : '');
+  const sHint = $('#tab-signed .helptext');
+  if(sHint) sHint.textContent = 'Signed bills where a collection visit is assigned to you. Open “Collection Visits” on a bill to log your attempts and the amount collected, and set the next visit date. You can also fill in or correct the retailer, date and beat.';
+}
+
+async function checkAuthAndBoot(){
+  if(!sb){
+    // Supabase isn't configured at all -- nothing to authenticate against, just boot.
+    hideAuthGate();
+    loadData();
+    return;
+  }
+  try{
+    const { data: { session } } = await sb.auth.getSession();
+    if(session){ await enterApp(session); }
+    else { showAuthGate(); }
+  }catch(e){
+    console.error(e);
+    showAuthGate();
+  }
+  sb.auth.onAuthStateChange((event, session) => {
+    // setTimeout: supabase-js can deadlock if you call it again inside this callback
+    if(event === 'SIGNED_IN' && session){ setTimeout(() => enterApp(session), 0); }
+    else if(event === 'SIGNED_OUT'){
+      const wasIn = enteredFor !== null;
+      bills = []; enteredFor = null; userRole = null; showAuthGate();
+      if(wasIn) location.reload();   // clears any role-specific screen state
+    }
+  });
+}
+
+/* Delivery partners sign in with a Login ID (e.g. mukesh4821). Behind the scenes it is stored
+   as an address on this private domain -- must match LOGIN_DOMAIN in the Edge Function. */
+const PARTNER_LOGIN_DOMAIN = 'delivery.invalid';
+
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  let email = $('#loginEmail').value.trim();
+  if(!email.includes('@')) email = email.toLowerCase() + '@' + PARTNER_LOGIN_DOMAIN;
+  const password = $('#loginPassword').value;
+  const errEl = $('#loginError');
+  const btn = $('#loginForm .auth-submit');
+  errEl.hidden = true;
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = 'Sign in';
+  if(error){
+    errEl.textContent = /invalid/i.test(error.message) ? 'Wrong login ID / email or password.' : error.message;
+    errEl.hidden = false;
+  }
+});
+
+/* ---------------- Excel downloads (exactly what the filters currently show) ---------------- */
+let deliveryExportRows = [], signedExportRows = [], agentExport = null;
+const safeName = s => String(s||'').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const staffTag = () => (isStaff() && partnerName) ? '_' + safeName(partnerName) : '';
+
+function downloadXlsx(filename, sheets){
+  if(typeof XLSX === 'undefined'){ toast('The Excel library did not load — check your internet connection and refresh the page.'); return false; }
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(s => {
+    const rows = s.rows.length ? s.rows : [{ Note: 'No rows' }];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({ wch: Math.min(45, Math.max(String(k).length, ...rows.slice(0, 300).map(r => String(r[k] ?? '').length)) + 2) }));
+    XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31));
+  });
+  XLSX.writeFile(wb, filename);
+  return true;
+}
+function filtersSheet(lines, rowCount){
+  const rows = lines.filter(l => l[1]).map(([k, v]) => ({ Filter: k, Value: v }));
+  if(!rows.length) rows.push({ Filter: 'Filters', Value: 'None — all rows' });
+  rows.push({ Filter: 'Rows exported', Value: rowCount });
+  rows.push({ Filter: 'Exported on', Value: new Date().toLocaleString() });
+  rows.push({ Filter: 'Exported by', Value: isStaff() ? (partnerName || 'Staff') : 'Admin' });
+  return { name: 'Filters applied', rows };
+}
+const blankOrNum = v => v === '' || v == null ? '' : toNum(v);
+
+function exportDelivery(){
+  if(!deliveryExportRows.length){ toast('Nothing to download — no bills match the filters.'); return; }
+  const lines = isStaff()
+    ? [['Delivery date', dpFilterDate]]
+    : [['Delivery date', adFilterDate], ['Delivery partner', adFilterPartner === '__none__' ? 'Unassigned' : adFilterPartner]];
+  lines.push(['Bill number', dlx.billNo], ['Billing date from', dlx.billFrom], ['Billing date to', dlx.billTo], ['Company', dlx.company],
+             ['Sales person', dlx.sales === '__none__' ? 'Unassigned' : dlx.sales], ['Area', dlx.area]);
+  if(lines.some(l => l[1])) lines.push(['Sorted by', 'Voucher number, high to low']);
+  const rows = deliveryExportRows.map(b => ({
+    'Company': b.company, 'Billing date': b.date, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer,
+    'Total Amount': toNum(b.totalAmount), 'Delivery Date': b.deliveryDate, 'Area': b.area,
+    'Sales Person': b.salesPerson, 'Delivery Partner': b.deliveryPartner, 'Delivery Status': b.deliveryStatus,
+    'Amount Collected': blankOrNum(b.amountAtDelivery), 'Discount': blankOrNum(b.discount),
+    'Comments': b.comments, 'Balance': balanceOutstanding(b), 'Verified': b.verified ? 'Yes' : 'No'
+  }));
+  if(downloadXlsx(`Delivery_Details${staffTag()}_${todayLocalISO()}.xlsx`, [{ name: 'Delivery Details', rows }, filtersSheet(lines, rows.length)]))
+    toast(`Downloaded ${rows.length} bill${rows.length===1?'':'s'}.`);
+}
+
+function exportSigned(){
+  if(!signedExportRows.length){ toast('Nothing to download — no signed bills match the filters.'); return; }
+  const byDate = (x, y) => (x.date||'').localeCompare(y.date||'');
+  const rows = signedExportRows.map(b => {
+    const v = [...(b.visits||[])].sort(byDate), last = v[v.length - 1];
+    return {
+      'Billing date': b.date, 'Delivery Date': b.deliveryDate, 'Company': b.company, 'Vch/Bill No': b.billNo,
+      'Retailer': b.retailer, 'Area': b.area, 'Sales Person': b.salesPerson, 'Delivery Partner': b.deliveryPartner,
+      'Total Amount': toNum(b.totalAmount), 'Paid at Delivery + Discount': paidAtDeliveryPlusDiscount(b),
+      'Next Visit Planned': b.nextVisitPlanned, 'Visits': v.length,
+      'Last Visit': last ? `${last.date||''} · ${last.status||'no status'}` : '',
+      'Total Collected': totalCollected(b), 'Balance Outstanding': balanceOutstanding(b)
+    };
+  });
+  const visitRows = [];
+  signedExportRows.forEach(b => [...(b.visits||[])].sort(byDate).forEach(v => visitRows.push({
+    'Company': b.company, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer, 'Visit Date': v.date,
+    'Assigned To': v.assignedTo, 'Status': v.status, 'Amount Collected': toNum(v.amount), 'Notes': v.notes })));
+  const f = signedFilters;
+  const lines = [['Bill number', f.billNo], ['Balance', { pending: 'Not fully collected', full: 'Fully collected' }[f.balanceStatus] || ''], ['Company', f.company], ['Area', f.area],
+                 ['Sales person', f.salesPerson], ['Date from', f.dateFrom], ['Date to', f.dateTo]];
+  if(downloadXlsx(`Signed_Bills${staffTag()}_${todayLocalISO()}.xlsx`,
+      [{ name: 'Signed Bills', rows }, { name: 'Collection Visits', rows: visitRows }, filtersSheet(lines, rows.length)]))
+    toast(`Downloaded ${rows.length} signed bill${rows.length===1?'':'s'}.`);
+}
+
+function exportAgent(){
+  if(!agentExport){ return; }
+  const { selDate, dayBills, partnerGroups, salesGroups } = agentExport;
+  const visitsToday = [];
+  bills.forEach(b => { if((b.deliveryStatus||'').toLowerCase() !== 'signed') return;
+    (b.visits||[]).forEach(v => { if(v.date === selDate) visitsToday.push({ b, v }); }); });
+  if(!dayBills.length && !visitsToday.length){ toast('Nothing to download — no deliveries recorded for this date.'); return; }
+  const summary = (groups, label, withCheck) => {
+    const tot = { cash:0, cashCount:0, bank:0, signedCount:0, totalValue:0, totalBills:0 };
+    const rows = Object.keys(groups).sort().map(k => {
+      const g = groups[k]; Object.keys(tot).forEach(x => { tot[x] += g[x]; });
+      const r = { [label]: k, 'Cash Collected': g.cash, 'Cash Bills': g.cashCount, 'Bank/UPI Collected': g.bank,
+                  'Signed Bills': g.signedCount, 'Total Value': g.totalValue, 'Total Bills': g.totalBills };
+      if(withCheck){ const pb = dayBills.filter(b => (b.deliveryPartner||'').trim() === k);
+        r['Office check'] = pb.length ? `${pb.filter(b => b.verified).length}/${pb.length} verified` : ''; }
+      return r;
+    });
+    if(rows.length){
+      const r = { [label]: 'TOTAL', 'Cash Collected': tot.cash, 'Cash Bills': tot.cashCount, 'Bank/UPI Collected': tot.bank,
+                  'Signed Bills': tot.signedCount, 'Total Value': tot.totalValue, 'Total Bills': tot.totalBills };
+      if(withCheck) r['Office check'] = '';
+      rows.push(r);
+    }
+    return rows;
+  };
+  const billRows = [...dayBills].sort((a, b) => (a.deliveryPartner||'').localeCompare(b.deliveryPartner||'') || cmpVoucherDesc(a, b)).map(b => ({
+    'Delivery Partner': b.deliveryPartner, 'Company': b.company, 'Billing date': b.date, 'Vch/Bill No': b.billNo,
+    'Retailer': b.retailer, 'Area': b.area, 'Sales Person': b.salesPerson, 'Total Amount': toNum(b.totalAmount),
+    'Delivery Status': b.deliveryStatus, 'Amount Collected': blankOrNum(b.amountAtDelivery), 'Discount': blankOrNum(b.discount),
+    'Balance': balanceOutstanding(b), 'Comments': b.comments, 'Verified': b.verified ? 'Yes' : 'No' }));
+  const sheets = [
+    { name: 'By Delivery Partner', rows: summary(partnerGroups, 'Delivery Partner', true) },
+    { name: 'By Sales Person', rows: summary(salesGroups, 'Sales Person', false) },
+    { name: `Bills ${selDate}`, rows: billRows }
+  ];
+  if(visitsToday.length) sheets.push({ name: `Visits ${selDate}`, rows: visitsToday.map(({ b, v }) => ({
+    'Company': b.company, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer, 'Assigned To': v.assignedTo,
+    'Status': v.status, 'Amount Collected': toNum(v.amount), 'Notes': v.notes })) });
+  sheets.push(filtersSheet([['Delivery date', selDate]], billRows.length));
+  if(downloadXlsx(`Daily_Agent_Report_${selDate}.xlsx`, sheets)) toast('Daily Agent Report downloaded.');
+}
+
+$$('.save-all-btn').forEach(btn => btn.addEventListener('click', saveAllChanges));
+$$('.discard-btn').forEach(btn => btn.addEventListener('click', discardChanges));
+$('#saveStatus').addEventListener('click', () => { if(dirty.size) saveAllChanges(); });
+$('#deliveryExportBtn').addEventListener('click', exportDelivery);
+$('#signedExportBtn').addEventListener('click', exportSigned);
+$('#agentExportBtn').addEventListener('click', exportAgent);
+document.addEventListener('keydown', (e) => {
+  if(!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 's') return;
+  const onSaveTab = $('#tab-delivery').classList.contains('active') || $('#tab-signed').classList.contains('active');
+  if(!onSaveTab) return;
+  e.preventDefault();
+  saveAllChanges();
+});
+window.addEventListener('beforeunload', (e) => { if(dirty.size){ e.preventDefault(); e.returnValue = ''; } });
+
+$('#logoutBtn').addEventListener('click', async () => {
+  if(!sb) return;
+  if(dirty.size && !confirm(`You have ${dirty.size} unsaved change${dirty.size===1?'':'s'}. Log out and lose them?`)) return;
+  await sb.auth.signOut();
+});
+
+/* ---------------- full backup export (.xlsx) ---------------- */
+$('#backupBtn').addEventListener('click', () => {
+  if(!bills.length){
+    toast('Nothing to back up yet — the ledger is empty.');
+    return;
+  }
+
+  const billRows = [...bills]
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''))
+    .map(b => ({
+      'Company': b.company, 'Date': b.date, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer,
+      'Total Amount': toNum(b.totalAmount),
+      'Delivery Date': b.deliveryDate, 'Area': b.area, 'Sales Person': b.salesPerson,
+      'Delivery Partner': b.deliveryPartner, 'Delivery Status': b.deliveryStatus,
+      'Amount Collected': b.amountAtDelivery === '' ? '' : toNum(b.amountAtDelivery),
+      'Discount': b.discount === '' ? '' : toNum(b.discount),
+      'Comments': b.comments, 'Next Visit Planned': b.nextVisitPlanned,
+      'Total Collected': totalCollected(b), 'Balance Outstanding': balanceOutstanding(b),
+      'Settlement Status': settlementStatus(b)
+    }));
+
+  const visitRows = [];
+  [...bills].sort((a,b) => (a.date||'').localeCompare(b.date||'')).forEach(b => {
+    (b.visits||[]).forEach(v => {
+      visitRows.push({
+        'Company': b.company, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer,
+        'Visit Date': v.date, 'Assigned To': v.assignedTo, 'Status': v.status,
+        'Amount Collected': toNum(v.amount), 'Notes': v.notes
+      });
+    });
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(billRows), 'Delivery Details');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(visitRows.length ? visitRows : [{'Note':'No collection visits logged yet'}]), 'Collection Visits');
+
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Shree_Radhe_Ledger_Backup_${today}.xlsx`);
+  toast(`Backup downloaded — ${billRows.length} bills, ${visitRows.length} visits.`);
+});
+
+checkAuthAndBoot();
+</script>
+</body>
+</html>

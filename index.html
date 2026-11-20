@@ -2277,12 +2277,18 @@ function renderSigned(){
     const lastVisit = visits.length ? [...visits].sort((x,y)=>(x.date||'').localeCompare(y.date||''))[visits.length-1] : null;
 
     const lockEdit = (isStaff() && b.verified) ? 'disabled' : '';   // the office has locked this bill for the partner
+    // Partners / sales persons may only FILL IN an empty retailer or bill date; once it is saved, only the office can change it.
+    // (Checked against the saved value, so a value typed but not yet saved can still be corrected.)
+    const snap = b._snap || {};
+    const lockRet  = (isStaff() && (b.verified || String(snap.retailer||'').trim())) ? 'disabled' : '';
+    const lockDate = (isStaff() && (b.verified || String(snap.date||'').trim())) ? 'disabled' : '';
+    const lockTip  = 'Already filled in — only the office can change it';
     const mainRow = `<tr data-id="${b.id}"${dirty.has(b.id) ? ' class="dirty-row"' : ''}>
-      <td><input type="date" data-field="date" value="${escapeHtml(b.date||'')}" ${lockEdit}></td>
+      <td><input type="date" data-field="date" value="${escapeHtml(b.date||'')}" ${lockDate} ${lockDate ? `title="${lockTip}"` : ''}></td>
       <td class="mono">${escapeHtml(b.deliveryDate)}</td>
       <td>${escapeHtml(b.company)}</td>
       <td>${escapeHtml(b.billNo)}</td>
-      <td><input type="text" data-field="retailer" value="${escapeHtml(b.retailer||'')}" placeholder="Add retailer" style="min-width:140px;" ${lockEdit}></td>
+      <td><input type="text" data-field="retailer" value="${escapeHtml(b.retailer||'')}" placeholder="Add retailer" style="min-width:140px;" ${lockRet} ${lockRet ? `title="${lockTip}"` : ''}></td>
       <td><input type="text" data-field="area" list="signedAreaList" value="${escapeHtml(b.area||'')}" placeholder="Add beat" style="min-width:100px;" ${lockEdit}></td>
       <td>${escapeHtml(b.salesPerson||'')}</td>
       <td>${escapeHtml(b.deliveryPartner||'')}</td>
@@ -2854,7 +2860,7 @@ function applyRoleUI(){
   const sTitle = $('#tab-signed .section-title');
   if(sTitle) sTitle.textContent = 'My collections' + (partnerName ? ' — ' + partnerName : '');
   const sHint = $('#tab-signed .helptext');
-  if(sHint) sHint.textContent = 'Signed bills where a collection visit is assigned to you. Open “Collection Visits” on a bill to log your attempts and the amount collected, and set the next visit date. You can also fill in or correct the retailer, date and beat.';
+  if(sHint) sHint.textContent = 'Signed bills where a collection visit is assigned to you. Open “Collection Visits” on a bill to log your attempts and the amount collected, and set the next visit date. You can fill in the retailer and bill date when they are empty (once saved, only the office can change them), and edit the beat.';
 }
 
 async function checkAuthAndBoot(){

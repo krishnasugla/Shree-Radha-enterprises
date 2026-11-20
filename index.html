@@ -486,7 +486,7 @@ Bajaj&#9;2026-07-01&#9;2042&#9;Vishal Medicos&#9;5887"></textarea>
     <details class="panel" id="signedLoader" style="padding:14px 16px;">
       <summary style="cursor:pointer; font-weight:600; color:var(--teal);">Load signed bills from a list</summary>
       <p class="helptext" style="margin-top:10px;">
-        Upload or paste four columns: <strong>Company, Signed Bill No, Sales Person, Amount Outstanding</strong>. Each bill is added as <strong>Signed</strong>, with the outstanding amount as its bill amount, and assigned to that sales person (it appears in their login, where they can log visits). Retailer, Date and Area / Beat are left empty; fill them in later in the table below. If a bill number is already in the ledger you get an alert and that row is skipped unless you tick it.
+        Upload or paste four columns: <strong>Company, Signed Bill No, Sales Person, Amount Outstanding</strong>. Each bill is added as <strong>Signed</strong>, with the outstanding amount as its bill amount. The sales person is kept as history only: <strong>nobody sees the bill in their login until you pick a name in the Assigned To column</strong> below. Retailer, Date and Area / Beat are left empty; fill them in later in the table. If a bill number is already in the ledger you get an alert and that row is skipped unless you tick it.
       </p>
       <div class="dropzone" id="slDropzone">
         <div class="icon">XLS</div>
@@ -540,6 +540,10 @@ Bajaj&#9;2042&#9;Sunil Garg&#9;5887"></textarea>
         <div>
           <label>Bill number</label>
           <input type="text" id="f-billNo" placeholder="e.g. 3584" autocomplete="off" style="width:130px;">
+        </div>
+        <div id="f-assigned-wrap">
+          <label>Assigned To</label>
+          <select id="f-assigned"><option value="">All</option></select>
         </div>
         <div>
           <label>Balance Outstanding</label>
@@ -645,6 +649,10 @@ let userRole = null, partnerName = '', enteredFor = null;   // set after login f
 const isStaff = () => userRole === 'delivery' || userRole === 'sales';   // delivery partners and sales persons
 const sameName = (a, b) => (a||'').trim().toLowerCase() === (b||'').trim().toLowerCase();   // capitals/spaces ignored, like the database
 const hasMyVisit = b => (b.visits||[]).some(v => sameName(v.assignedTo, partnerName));
+let hasAssignCol = false;   // true once the database has bills.assigned_to
+/* A bill is MINE when the office picked my name in "Assigned To", or a collection visit on it is assigned to me.
+   The Sales Person column is only history and never gives access. */
+const isMyBill = b => sameName(b.assignedTo, partnerName) || hasMyVisit(b);
 let deliveryRowOrder = [];
 let fillDrag = null;
 let expandedSignedIds = new Set();
@@ -729,7 +737,8 @@ function billToRow(b){
     total_amount: toNum(b.totalAmount) || 0, delivery_date: n2s(b.deliveryDate), area: n2s(b.area),
     sales_person: n2s(b.salesPerson), delivery_partner: n2s(b.deliveryPartner), delivery_status: n2s(b.deliveryStatus),
     amount_at_delivery: n2n(b.amountAtDelivery), comments: n2s(b.comments), discount: n2n(b.discount),
-    next_visit_planned: n2s(b.nextVisitPlanned)
+    next_visit_planned: n2s(b.nextVisitPlanned),
+    ...(hasAssignCol ? { assigned_to: n2s(b.assignedTo) } : {})   // only once the database has the column (see the SQL update)
   };
 }
 function rowToBill(r){
@@ -738,7 +747,7 @@ function rowToBill(r){
     totalAmount: r.total_amount==null?0:Number(r.total_amount), deliveryDate: r.delivery_date||'', area: r.area||'',
     salesPerson: r.sales_person||'', deliveryPartner: r.delivery_partner||'', deliveryStatus: r.delivery_status||'',
     amountAtDelivery: r.amount_at_delivery==null?'':Number(r.amount_at_delivery), comments: r.comments||'',
-    discount: r.discount==null?'':Number(r.discount), nextVisitPlanned: r.next_visit_planned||'', verified: !!r.verified, visits: [],
+    discount: r.discount==null?'':Number(r.discount), nextVisitPlanned: r.next_visit_planned||'', verified: !!r.verified, assignedTo: r.assigned_to||'', visits: [],
     _snap: { delivery_date: r.delivery_date ?? null, delivery_status: r.delivery_status ?? null,
              amount_at_delivery: r.amount_at_delivery == null ? null : Number(r.amount_at_delivery),
              comments: r.comments ?? null, next_visit_planned: r.next_visit_planned ?? null,
@@ -806,6 +815,7 @@ async function loadData(){
     if(mySeq !== loadSeq) return;   // a newer load has started; let that one win
     if(billsRes.error) throw billsRes.error;
     if(visitsRes.error) throw visitsRes.error;
+    hasAssignCol = !!(billsRes.data && billsRes.data.length && 'assigned_to' in billsRes.data[0]);
     if(userRole === 'admin') await loadPartnerNames();
     const visitsByBill = {};
     (visitsRes.data||[]).forEach(vr => {
@@ -1593,7 +1603,6 @@ function slRenderPreview(){
     if(r.problem) check = `<span style="color:var(--brick);">${escapeHtml(r.problem)}</span>`;
     else if(r.dups.length) check = `<span style="color:var(--brick);">⚠ Already in ledger: ${escapeHtml(slDescribe(r.dups[0]))}${r.dups.length>1?` (+${r.dups.length-1} more)`:''}${r.sameCompany ? '' : ' — different company'}</span>`;
     else if(r.inFile) check = `<span style="color:var(--brick);">⚠ Repeated in this file</span>`;
-    else if(r.notListed) check = `<span style="color:var(--amber);">Sales person not in the name list — they won't see it unless the name matches their login</span>`;
     else check = '<span style="color:var(--green);">OK</span>';
     return `<tr><td><input type="checkbox" data-sl="${i}" ${r.load?'checked':''} ${r.problem?'disabled':''}></td>
       <td>${escapeHtml(r.company)}</td><td>${escapeHtml(r.billNo)}</td><td>${escapeHtml(r.salesPerson)}</td>
@@ -1705,7 +1714,7 @@ $('#slCommitBtn').addEventListener('click', async () => {
       id: uid(), company: r.company, date:'', billNo: r.billNo, retailer:'', totalAmount: r.amount,
       deliveryDate:'', area:'', salesPerson: r.salesPerson, deliveryPartner:'', deliveryStatus:'Signed',
       amountAtDelivery:'', comments:'', discount:'', nextVisitPlanned:'', verified:false,
-      visits: [{ id: uid(), date:'', assignedTo: r.salesPerson, status:'', amount:0, notes:'Loaded from signed bills list' }]
+      assignedTo:'', visits: []    // not assigned to anyone until the office picks a name in "Assigned To"
     }));
     if(sb){
       for(let i = 0; i < list.length; i += 500){
@@ -1713,8 +1722,6 @@ $('#slCommitBtn').addEventListener('click', async () => {
         const { error } = await sb.from('bills').insert(chunk.map(billToRow));
         if(error) throw error;
         added.push(...chunk);
-        const { error: vErr } = await sb.from('visits').insert(chunk.flatMap(b => b.visits.map(v => visitToRow(v, b.id))));
-        if(vErr) throw vErr;
       }
     } else added.push(...list);
     bills = bills.concat(added);
@@ -2179,14 +2186,14 @@ function wireEditableRows(wrap, sourceList){
 /* ============================================================
    RENDER: Signed Bills (with filters)
    ============================================================ */
-let signedFilters = { billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
+let signedFilters = { assigned:'', billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
 let signedFiltersWired = false;
 
 function wireSignedFilters(){
   if(signedFiltersWired) return;
   signedFiltersWired = true;
   const map = {
-    'f-billNo':'billNo', 'f-dateFrom':'dateFrom', 'f-dateTo':'dateTo',
+    'f-billNo':'billNo', 'f-assigned':'assigned', 'f-dateFrom':'dateFrom', 'f-dateTo':'dateTo',
     'f-area':'area', 'f-company':'company', 'f-salesPerson':'salesPerson', 'f-balance':'balanceStatus'
   };
   Object.keys(map).forEach(id => {
@@ -2194,7 +2201,7 @@ function wireSignedFilters(){
     el.addEventListener(id === 'f-billNo' ? 'input' : 'change', () => { signedFilters[map[id]] = el.value; pageState['signed'] = 0; renderSigned(); });   // bill number filters as you type
   });
   $('#f-clear').addEventListener('click', () => {
-    signedFilters = { billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
+    signedFilters = { assigned:'', billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
     pageState['signed'] = 0;
     renderSigned();
   });
@@ -2220,6 +2227,7 @@ function applySignedFilters(list){
     if(f.billNo && !normKey(b.billNo).includes(normKey(f.billNo))) return false;
     if(f.dateFrom && (b.date||'') < f.dateFrom) return false;
     if(f.dateTo && (b.date||'') > f.dateTo) return false;
+    if(f.assigned === '__none__' ? !!(b.assignedTo||'').trim() : (f.assigned && !sameName(b.assignedTo, f.assigned))) return false;
     if(f.area && (b.area||'') !== f.area) return false;
     if(f.company && (b.company||'') !== f.company) return false;
     if(f.salesPerson && (b.salesPerson||'') !== f.salesPerson) return false;
@@ -2229,11 +2237,11 @@ function applySignedFilters(list){
   });
 }
 
-const COL_COUNT_SIGNED = 14; // for the expanded detail row's colspan
+const COL_COUNT_SIGNED = 15; // for the expanded detail row's colspan
 
 function renderSigned(){
   wireSignedFilters();
-  const signed = bills.filter(b => (b.deliveryStatus||'').toLowerCase() === 'signed' && (!isStaff() || hasMyVisit(b)));   // staff: only bills with a collection visit assigned to them
+  const signed = bills.filter(b => (b.deliveryStatus||'').toLowerCase() === 'signed' && (!isStaff() || isMyBill(b)));   // staff: only bills assigned to them (Assigned To, or a collection visit assigned to them)
 
   // populate dropdown option lists from the full signed set (before filtering)
   const areas = [...new Set(signed.map(b=>b.area).filter(Boolean))].sort();
@@ -2242,6 +2250,8 @@ function renderSigned(){
   populateSelect('f-company', companies, signedFilters.company);
   populateSelect('f-salesPerson', SALES_PERSON_OPTIONS, signedFilters.salesPerson);
   $('#f-balance').value = signedFilters.balanceStatus;
+  $('#f-assigned').innerHTML = '<option value="">All</option><option value="__none__">Not assigned</option>' + ASSIGNED_FOR_OPTIONS.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  $('#f-assigned').value = signedFilters.assigned;
   if($('#f-billNo').value !== signedFilters.billNo) $('#f-billNo').value = signedFilters.billNo;
   $('#f-dateFrom').value = signedFilters.dateFrom;
   $('#f-dateTo').value = signedFilters.dateTo;
@@ -2291,6 +2301,11 @@ function renderSigned(){
       <td><input type="text" data-field="retailer" value="${escapeHtml(b.retailer||'')}" placeholder="Add retailer" style="min-width:140px;" ${lockRet} ${lockRet ? `title="${lockTip}"` : ''}></td>
       <td><input type="text" data-field="area" list="signedAreaList" value="${escapeHtml(b.area||'')}" placeholder="Add beat" style="min-width:100px;" ${lockEdit}></td>
       <td>${escapeHtml(b.salesPerson||'')}</td>
+      <td>${isStaff() ? escapeHtml(b.assignedTo||'') : `<select data-field="assignedTo" style="min-width:140px;" ${hasAssignCol ? '' : 'disabled title="Run the SQL update first (adds the Assigned To column)"'}>
+          <option value="">— Not assigned —</option>
+          ${[...ASSIGNED_FOR_OPTIONS, ...(b.assignedTo && !ASSIGNED_FOR_OPTIONS.some(n => sameName(n, b.assignedTo)) ? [b.assignedTo] : [])]
+              .map(n => `<option value="${escapeHtml(n)}" ${sameName(n, b.assignedTo) ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}
+        </select>`}</td>
       <td>${escapeHtml(b.deliveryPartner||'')}</td>
       <td class="num mono">${fmtMoney(b.totalAmount)}</td>
       <td class="num mono">${fmtMoney(paidAtDeliveryPlusDiscount(b))}</td>
@@ -2318,7 +2333,7 @@ function renderSigned(){
 
   wrap.innerHTML = `<datalist id="signedAreaList">${areas.map(a => `<option value="${escapeHtml(a)}">`).join('')}</datalist><table>
     <thead><tr>
-      <th>Date</th><th>Delivery Date</th><th>Company</th><th>Vch/Bill No</th><th>Retailer</th><th>Area / Beat</th><th>Sales Person</th><th>Delivery Partner</th>
+      <th>Date</th><th>Delivery Date</th><th>Company</th><th>Vch/Bill No</th><th>Retailer</th><th>Area / Beat</th><th>Sales Person</th><th>Assigned To</th><th>Delivery Partner</th>
       <th class="num">Bill Amount</th><th class="num">Paid at Delivery+Discount</th><th>Next Visit Planned</th><th>Collection Visits</th>
       <th class="num">Total Collected</th><th class="num">Balance Outstanding</th>
     </tr></thead>
@@ -2852,7 +2867,8 @@ function applyRoleUI(){
   });
   $$('.tabview').forEach(v => v.classList.toggle('active', v.id === 'tab-delivery'));
   $('#backupBtn').style.display = 'none';
-  const sl = $('#signedLoader'); if(sl) sl.style.display = 'none';   // only the office loads signed bills
+  const sl = $('#signedLoader'); if(sl) sl.style.display = 'none';
+  const sa = $('#f-assigned-wrap'); if(sa) sa.style.display = 'none';   // only the office loads signed bills
   const title = $('#tab-delivery .section-title');
   if(title) title.textContent = 'My deliveries' + (partnerName ? ' — ' + partnerName : '');
   const hint = $('#tab-delivery .helptext');
@@ -2963,7 +2979,7 @@ function exportSigned(){
     const v = [...(b.visits||[])].sort(byDate), last = v[v.length - 1];
     return {
       'Billing date': b.date, 'Delivery Date': b.deliveryDate, 'Company': b.company, 'Vch/Bill No': b.billNo,
-      'Retailer': b.retailer, 'Area': b.area, 'Sales Person': b.salesPerson, 'Delivery Partner': b.deliveryPartner,
+      'Retailer': b.retailer, 'Area': b.area, 'Sales Person': b.salesPerson, 'Assigned To': b.assignedTo, 'Delivery Partner': b.deliveryPartner,
       'Total Amount': toNum(b.totalAmount), 'Paid at Delivery + Discount': paidAtDeliveryPlusDiscount(b),
       'Next Visit Planned': b.nextVisitPlanned, 'Visits': v.length,
       'Last Visit': last ? `${last.date||''} · ${last.status||'no status'}` : '',

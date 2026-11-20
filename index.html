@@ -538,6 +538,10 @@ Bajaj&#9;2042&#9;Sunil Garg&#9;5887"></textarea>
     <div class="panel" style="padding:14px 16px;">
       <div class="row" id="signedFilterBar">
         <div>
+          <label>Bill number</label>
+          <input type="text" id="f-billNo" placeholder="e.g. 3584" autocomplete="off" style="width:130px;">
+        </div>
+        <div>
           <label>Balance Outstanding</label>
           <select id="f-balance">
             <option value="">All</option>
@@ -1839,11 +1843,12 @@ document.addEventListener('mouseup', () => {
    ============================================================ */
 /* Extra Delivery Details filters, shared by the admin and staff views:
    Billing date (from / to), Company, Sales person, Area. '' = all; '__none__' = no sales person. */
-const dlx = { billFrom:'', billTo:'', company:'', sales:'', area:'' };
+const dlx = { billNo:'', billFrom:'', billTo:'', company:'', sales:'', area:'' };
 const dlxActive = () => Object.values(dlx).some(v => v);
 function dlxClear(){ Object.keys(dlx).forEach(k => { dlx[k] = ''; }); }
 function dlxBarHtml(){
   return `<div class="row" style="margin-top:10px;">
+      <div><label>Bill number</label><input type="text" id="dlBillNo" placeholder="e.g. 3584" autocomplete="off" style="width:130px;"></div>
       <div><label>Billing date from</label><input type="date" id="dlBillFrom"></div>
       <div><label>Billing date to</label><input type="date" id="dlBillTo"></div>
       <div><label>Company</label><select id="dlCompany" style="min-width:140px;"></select></div>
@@ -1852,8 +1857,8 @@ function dlxBarHtml(){
     </div>`;
 }
 function dlxWire(rerender){
-  const map = { dlBillFrom:'billFrom', dlBillTo:'billTo', dlCompany:'company', dlSales:'sales', dlArea:'area' };
-  Object.keys(map).forEach(id => $('#' + id).addEventListener('change', e => { dlx[map[id]] = e.target.value; rerender(); }));
+  const map = { dlBillNo:'billNo', dlBillFrom:'billFrom', dlBillTo:'billTo', dlCompany:'company', dlSales:'sales', dlArea:'area' };
+  Object.keys(map).forEach(id => $('#' + id).addEventListener(id === 'dlBillNo' ? 'input' : 'change', e => { dlx[map[id]] = e.target.value; rerender(); }));   // bill number filters as you type
 }
 /* Fill the dropdowns from the bills in `list` (before any filtering) and keep the current choice */
 function dlxFill(list, salesExtra){
@@ -1867,11 +1872,13 @@ function dlxFill(list, salesExtra){
   fill($('#dlCompany'), uniq(list.map(b => b.company)), dlx.company);
   fill($('#dlArea'), uniq(list.map(b => b.area)), dlx.area);
   fill($('#dlSales'), uniq([...(salesExtra||[]), ...list.map(b => b.salesPerson)]), dlx.sales, '<option value="__none__">Unassigned</option>');
+  if($('#dlBillNo').value !== dlx.billNo) $('#dlBillNo').value = dlx.billNo;   // only when changed (e.g. Clear), so typing is not disturbed
   $('#dlBillFrom').value = dlx.billFrom;
   $('#dlBillTo').value = dlx.billTo;
 }
 function dlxApply(list){
   return list.filter(b => {
+    if(dlx.billNo && !normKey(b.billNo).includes(normKey(dlx.billNo))) return false;
     if(dlx.billFrom && (b.date||'') < dlx.billFrom) return false;
     if(dlx.billTo && (b.date||'') > dlx.billTo) return false;
     if(dlx.company && !sameName(b.company, dlx.company)) return false;
@@ -2172,22 +2179,22 @@ function wireEditableRows(wrap, sourceList){
 /* ============================================================
    RENDER: Signed Bills (with filters)
    ============================================================ */
-let signedFilters = { dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
+let signedFilters = { billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
 let signedFiltersWired = false;
 
 function wireSignedFilters(){
   if(signedFiltersWired) return;
   signedFiltersWired = true;
   const map = {
-    'f-dateFrom':'dateFrom', 'f-dateTo':'dateTo',
+    'f-billNo':'billNo', 'f-dateFrom':'dateFrom', 'f-dateTo':'dateTo',
     'f-area':'area', 'f-company':'company', 'f-salesPerson':'salesPerson', 'f-balance':'balanceStatus'
   };
   Object.keys(map).forEach(id => {
     const el = $('#'+id);
-    el.addEventListener('change', () => { signedFilters[map[id]] = el.value; pageState['signed'] = 0; renderSigned(); });
+    el.addEventListener(id === 'f-billNo' ? 'input' : 'change', () => { signedFilters[map[id]] = el.value; pageState['signed'] = 0; renderSigned(); });   // bill number filters as you type
   });
   $('#f-clear').addEventListener('click', () => {
-    signedFilters = { dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
+    signedFilters = { billNo:'', dateFrom:'', dateTo:'', area:'', company:'', salesPerson:'', balanceStatus:'' };
     pageState['signed'] = 0;
     renderSigned();
   });
@@ -2210,6 +2217,7 @@ function populateSelect(id, values, currentVal){
 function applySignedFilters(list){
   const f = signedFilters;
   return list.filter(b => {
+    if(f.billNo && !normKey(b.billNo).includes(normKey(f.billNo))) return false;
     if(f.dateFrom && (b.date||'') < f.dateFrom) return false;
     if(f.dateTo && (b.date||'') > f.dateTo) return false;
     if(f.area && (b.area||'') !== f.area) return false;
@@ -2234,6 +2242,7 @@ function renderSigned(){
   populateSelect('f-company', companies, signedFilters.company);
   populateSelect('f-salesPerson', SALES_PERSON_OPTIONS, signedFilters.salesPerson);
   $('#f-balance').value = signedFilters.balanceStatus;
+  if($('#f-billNo').value !== signedFilters.billNo) $('#f-billNo').value = signedFilters.billNo;
   $('#f-dateFrom').value = signedFilters.dateFrom;
   $('#f-dateTo').value = signedFilters.dateTo;
 
@@ -2243,10 +2252,8 @@ function renderSigned(){
     ? `${filtered.length} of ${signed.length} bills match your filters`
     : `${signed.length} bills pending / followed up`;
 
-  // newest bill number first (numbers compared as numbers: 2042 comes before 987); same number -> company A-Z
-  const sorted = [...filtered].sort((a,b) =>
-    String(b.billNo||'').localeCompare(String(a.billNo||''), undefined, { numeric:true, sensitivity:'base' })
-    || (a.company||'').localeCompare(b.company||''));
+  // highest voucher number first, same rule as Delivery Details (last run of digits, so NV-26-27-3584 sorts as 3584)
+  const sorted = [...filtered].sort(cmpVoucherDesc);
   signedExportRows = sorted;
   const {slice} = paginate(sorted, 'signed');
   const wrap = $('#signedTableWrap');
@@ -2929,7 +2936,7 @@ function exportDelivery(){
   const lines = isStaff()
     ? [['Delivery date', dpFilterDate]]
     : [['Delivery date', adFilterDate], ['Delivery partner', adFilterPartner === '__none__' ? 'Unassigned' : adFilterPartner]];
-  lines.push(['Billing date from', dlx.billFrom], ['Billing date to', dlx.billTo], ['Company', dlx.company],
+  lines.push(['Bill number', dlx.billNo], ['Billing date from', dlx.billFrom], ['Billing date to', dlx.billTo], ['Company', dlx.company],
              ['Sales person', dlx.sales === '__none__' ? 'Unassigned' : dlx.sales], ['Area', dlx.area]);
   if(lines.some(l => l[1])) lines.push(['Sorted by', 'Voucher number, high to low']);
   const rows = deliveryExportRows.map(b => ({
@@ -2962,7 +2969,7 @@ function exportSigned(){
     'Company': b.company, 'Vch/Bill No': b.billNo, 'Retailer': b.retailer, 'Visit Date': v.date,
     'Assigned To': v.assignedTo, 'Status': v.status, 'Amount Collected': toNum(v.amount), 'Notes': v.notes })));
   const f = signedFilters;
-  const lines = [['Balance', { pending: 'Not fully collected', full: 'Fully collected' }[f.balanceStatus] || ''], ['Company', f.company], ['Area', f.area],
+  const lines = [['Bill number', f.billNo], ['Balance', { pending: 'Not fully collected', full: 'Fully collected' }[f.balanceStatus] || ''], ['Company', f.company], ['Area', f.area],
                  ['Sales person', f.salesPerson], ['Date from', f.dateFrom], ['Date to', f.dateTo]];
   if(downloadXlsx(`Signed_Bills${staffTag()}_${todayLocalISO()}.xlsx`,
       [{ name: 'Signed Bills', rows }, { name: 'Collection Visits', rows: visitRows }, filtersSheet(lines, rows.length)]))

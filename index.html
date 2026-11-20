@@ -2243,7 +2243,10 @@ function renderSigned(){
     ? `${filtered.length} of ${signed.length} bills match your filters`
     : `${signed.length} bills pending / followed up`;
 
-  const sorted = [...filtered].sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  // newest bill number first (numbers compared as numbers: 2042 comes before 987); same number -> company A-Z
+  const sorted = [...filtered].sort((a,b) =>
+    String(b.billNo||'').localeCompare(String(a.billNo||''), undefined, { numeric:true, sensitivity:'base' })
+    || (a.company||'').localeCompare(b.company||''));
   signedExportRows = sorted;
   const {slice} = paginate(sorted, 'signed');
   const wrap = $('#signedTableWrap');

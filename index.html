@@ -313,6 +313,57 @@
   .sheet-picker{margin-top:10px;}
   ::-webkit-scrollbar{height:10px; width:10px;}
   ::-webkit-scrollbar-thumb{background:#d7d3c6; border-radius:6px;}
+
+  /* ---- Signed Bills: simple card view for delivery partners / sales persons ---- */
+  .sx-wrap{border:0 !important; background:transparent !important; overflow:visible !important;}
+  .sx-stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin:4px 0 12px;}
+  .sx-stat{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:10px 14px;}
+  .sx-stat small{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft);}
+  .sx-stat b{font-size:20px; font-family:'IBM Plex Mono',monospace;}
+  .sx-stat.due b{color:var(--brick);} .sx-stat.ok b{color:var(--green);}
+  .sx-tools{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+  .sx-tools input{flex:2 1 220px;} .sx-tools select{flex:1 1 180px;}
+  .sx-tools input, .sx-tools select{font-size:16px; padding:11px 12px; min-height:44px;}
+  .sx-chips{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .sx-chip{border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 14px; font-size:13px; cursor:pointer; color:var(--ink); min-height:38px;}
+  .sx-chip b{font-weight:600; margin-left:4px; color:var(--ink-soft);}
+  .sx-chip.on{background:var(--teal); border-color:var(--teal); color:#fff;} .sx-chip.on b{color:#e4efec;}
+  .sx-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; align-items:start;}
+  .sx-card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow);}
+  .sx-card.sx-dirty{border-color:var(--amber); background:#fffdf7;}
+  .sx-head{display:flex; justify-content:space-between; gap:12px; align-items:flex-start;}
+  .sx-bill{display:block; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14px;}
+  .sx-co{display:block; font-size:12px; color:var(--ink-soft); margin-top:2px;}
+  .sx-bal{text-align:right; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:20px; line-height:1.1;}
+  .sx-bal small{display:block; font-family:inherit; font-size:10.5px; font-weight:500; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:2px;}
+  .sx-bal.due{color:var(--brick);} .sx-bal.ok{color:var(--green);}
+  .sx-retailer{font-size:16px; font-weight:600; margin:10px 0 4px;}
+  .sx-missing{color:var(--amber); font-weight:500; font-size:14px;}
+  .sx-meta{display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12.5px; color:var(--ink-soft);}
+  .sx-pills{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 12px;}
+  .sx-pill{font-size:12px; padding:3px 10px; border-radius:999px; background:#eee; color:#555;}
+  .sx-pill.cash{background:var(--green-tint); color:var(--green);} .sx-pill.bad{background:var(--brick-tint); color:var(--brick);}
+  .sx-pill.warn{background:var(--amber-tint); color:#8a5a12;} .sx-pill.info{background:var(--teal-tint); color:var(--teal-dark);}
+  .sx-open{width:100%; min-height:44px; font-size:14px;}
+  .sx-panel{margin-top:14px; border-top:1px solid var(--line); padding-top:14px;}
+  .sx-panel h4{margin:0 0 10px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);}
+  .sx-panel section + section{margin-top:18px;}
+  .sx-form{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;}
+  .sx-form .full{grid-column:1 / -1;}
+  .sx-form label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:4px;}
+  .sx-card input, .sx-card select{font-size:16px; min-height:44px; width:100%;}
+  .sx-card .btn{min-height:44px;}
+  .sx-actions{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;} .sx-actions .btn{flex:1 1 140px;}
+  .sx-card [hidden]{display:none !important;}
+  .sx-locked{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+  .sx-hist{list-style:none; margin:0; padding:0;}
+  .sx-hist li{padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;}
+  .sx-hist li:last-child{border-bottom:0;}
+  .sx-hist .top{display:flex; justify-content:space-between; gap:8px; align-items:center;}
+  .sx-hist .amt{font-family:'IBM Plex Mono',monospace; font-weight:600;}
+  .sx-hist .note{color:var(--ink-soft); margin-top:2px;}
+  .sx-hist button{border:0; background:none; color:var(--teal); font-weight:600; cursor:pointer; padding:6px 0; font-size:13px;}
+  @media (max-width:520px){ .sx-grid{grid-template-columns:1fr;} .sx-bal{font-size:19px;} }
 </style>
 </head>
 <body>
@@ -535,7 +586,20 @@ Bajaj&#9;2042&#9;Sunil Garg&#9;5887"></textarea>
       </div>
     </details>
 
-    <div class="panel" style="padding:14px 16px;">
+    <div id="signedStaffUI" style="display:none;">
+      <div class="sx-stats" id="sxStats"></div>
+      <div class="sx-tools">
+        <input type="search" id="sxSearch" placeholder="Search bill number or retailer" autocomplete="off">
+        <select id="sxSort" aria-label="Sort bills">
+          <option value="bill">Newest bill number first</option>
+          <option value="balance">Highest balance first</option>
+          <option value="next">Next visit date</option>
+        </select>
+      </div>
+      <div class="sx-chips" id="sxChips"></div>
+    </div>
+
+    <div class="panel" id="signedAdminFilters" style="padding:14px 16px;">
       <div class="row" id="signedFilterBar">
         <div>
           <label>Bill number</label>
@@ -2242,6 +2306,7 @@ const COL_COUNT_SIGNED = 15; // for the expanded detail row's colspan
 function renderSigned(){
   wireSignedFilters();
   const signed = bills.filter(b => (b.deliveryStatus||'').toLowerCase() === 'signed' && (!isStaff() || isMyBill(b)));   // staff: only bills assigned to them (Assigned To, or a collection visit assigned to them)
+  if(isStaff()){ renderSignedStaff(signed); return; }   // partners / sales persons get the simple card view below
 
   // populate dropdown option lists from the full signed set (before filtering)
   const areas = [...new Set(signed.map(b=>b.area).filter(Boolean))].sort();
@@ -2352,6 +2417,216 @@ function renderSigned(){
   $$('[data-detail-for]', wrap).forEach(tr => {
     const bill = bills.find(b => b.id === tr.dataset.detailFor);
     if(bill) wireVisitLogPanel(tr, bill);
+  });
+  renderPager($('#signedPager'), 'signed', sorted, renderSigned);
+}
+
+
+/* ============================================================
+   SIGNED BILLS - simple card view for delivery partners / sales persons
+   One card per bill: what is owed, the last visit, and a short form to log a visit.
+   Retailer / bill date / beat / next visit date sit under "details" and save with one button.
+   (The office keeps the full table.)
+   ============================================================ */
+const sx = { q:'', chip:'all', sort:'bill', wired:false };
+const sxMoney0 = n => fmtMoney(toNum(n));
+function sxDate(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); if(!m) return '';
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year:'numeric' } : {}) });
+}
+function sxVisitPill(v){
+  if(!v) return `<span class="sx-pill">Not visited yet</span>`;
+  const cls = /^collected/i.test(v.status||'') ? 'cash' : (/not/i.test(v.status||'') ? 'bad' : '');
+  return `<span class="sx-pill ${cls}">Last visit ${escapeHtml(sxDate(v.date) || '—')} · ${escapeHtml(v.status || 'no result')}</span>`;
+}
+function sxWireOnce(){
+  if(sx.wired) return; sx.wired = true;
+  $('#sxSearch').addEventListener('input', e => { sx.q = e.target.value; pageState['signed'] = 0; renderSigned(); });
+  $('#sxSort').addEventListener('change', e => { sx.sort = e.target.value; pageState['signed'] = 0; renderSigned(); });
+}
+
+function renderSignedStaff(signed){
+  sxWireOnce();
+  $('#signedStaffUI').style.display = 'block';
+  $('#signedAdminFilters').style.display = 'none';
+  $('#signedTableWrap').classList.add('sx-wrap');
+  const today = todayLocalISO();
+  const info = new Map(signed.map(b => {
+    const visits = [...(b.visits||[])].sort((x,y) => (x.date||'').localeCompare(y.date||''));
+    return [b.id, { bal: balanceOutstanding(b), visits, last: visits[visits.length-1] || null }];
+  }));
+  const isDue = b => info.get(b.id).bal > 0 && b.nextVisitPlanned && b.nextVisitPlanned <= today;
+  const chips = [
+    ['all',     'All',           () => true],
+    ['new',     'Not visited',   b => info.get(b.id).bal > 0 && !info.get(b.id).visits.length],
+    ['due',     'Follow-up due', isDue],
+    ['settled', 'Settled',       b => info.get(b.id).bal <= 0],
+  ];
+
+  // top numbers
+  const outstanding = signed.reduce((t, b) => t + Math.max(0, info.get(b.id).bal), 0);
+  const collectedToday = signed.reduce((t, b) => t + info.get(b.id).visits
+    .filter(v => v.date === today && sameName(v.assignedTo, partnerName)).reduce((a, v) => a + toNum(v.amount), 0), 0);
+  $('#sxStats').innerHTML = `
+    <div class="sx-stat"><small>Bills</small><b>${signed.length}</b></div>
+    <div class="sx-stat due"><small>Outstanding</small><b>${sxMoney0(outstanding)}</b></div>
+    <div class="sx-stat ok"><small>Collected today</small><b>${sxMoney0(collectedToday)}</b></div>`;
+  $('#sxChips').innerHTML = chips.map(([k, label, fn]) =>
+    `<button type="button" class="sx-chip ${sx.chip===k?'on':''}" data-chip="${k}">${label}<b>${signed.filter(fn).length}</b></button>`).join('');
+  $$('#sxChips [data-chip]').forEach(btn => btn.addEventListener('click', () => { sx.chip = btn.dataset.chip; pageState['signed'] = 0; renderSigned(); }));
+  if($('#sxSearch').value !== sx.q) $('#sxSearch').value = sx.q;
+  $('#sxSort').value = sx.sort;
+
+  // filter + sort
+  const chipFn = chips.find(c => c[0] === sx.chip)[2], q = normKey(sx.q);
+  const filtered = signed.filter(b => chipFn(b) && (!q || normKey(`${b.billNo} ${b.retailer} ${b.company}`).includes(q)));
+  const sorters = {
+    bill:    cmpVoucherDesc,
+    balance: (a, b) => info.get(b.id).bal - info.get(a.id).bal,
+    next:    (a, b) => (a.nextVisitPlanned || '9999').localeCompare(b.nextVisitPlanned || '9999') || cmpVoucherDesc(a, b),
+  };
+  const sorted = [...filtered].sort(sorters[sx.sort] || cmpVoucherDesc);
+  signedExportRows = sorted;
+  $('#signedCount').textContent = (q || sx.chip !== 'all') ? `${filtered.length} of ${signed.length} bills` : `${signed.length} bills assigned to you`;
+
+  const wrap = $('#signedTableWrap');
+  if(!signed.length){
+    wrap.innerHTML = emptyState('Nothing assigned to you yet', 'Bills the office assigns to you for collection will appear here.');
+    $('#signedPager').innerHTML = ''; return;
+  }
+  if(!filtered.length){
+    wrap.innerHTML = emptyState('No bills match', 'Try another search or tap “All”.');
+    $('#signedPager').innerHTML = ''; return;
+  }
+
+  const { slice } = paginate(sorted, 'signed');
+  const areas = [...new Set(signed.map(b => b.area).filter(Boolean))].sort();
+  const statusOpts = COLLECTION_STATUS_OPTIONS.map(o => `<option value="${o}">${o || 'Choose result…'}</option>`).join('');
+
+  const card = b => {
+    const { bal, visits, last } = info.get(b.id);
+    const open = expandedSignedIds.has(b.id);
+    const snap = b._snap || {};
+    const lockRet  = b.verified || String(snap.retailer||'').trim();
+    const lockDate = b.verified || String(snap.date||'').trim();
+    const next = b.nextVisitPlanned
+      ? `<span class="sx-pill ${isDue(b) ? 'warn' : 'info'}">${isDue(b) ? 'Follow-up due ' : 'Next visit '}${escapeHtml(sxDate(b.nextVisitPlanned))}</span>` : '';
+
+    const history = visits.length ? `<ul class="sx-hist">${[...visits].reverse().map(v => {
+      const mine = sameName(v.assignedTo, partnerName);
+      return `<li><div class="top"><span>${escapeHtml(sxDate(v.date) || 'No date')} · ${escapeHtml(v.status || 'no result')}${mine ? '' : ` · <i>${escapeHtml(v.assignedTo||'')}</i>`}</span>
+        <span class="amt">${toNum(v.amount) ? sxMoney0(v.amount) : ''}</span></div>
+        ${v.notes ? `<div class="note">${escapeHtml(v.notes)}</div>` : ''}
+        ${mine ? `<button type="button" data-sx-edit="${v.id}">Edit</button>` : ''}</li>`;
+    }).join('')}</ul>` : `<div class="sx-locked">No visits logged yet.</div>`;
+
+    const panel = !open ? '' : `<div class="sx-panel">
+      <section>
+        <h4>Log a visit</h4>
+        <div class="sx-form" data-sx-form>
+          <div><label>Date</label><input type="date" class="sx-v-date" value="${today}"></div>
+          <div><label>Result</label><select class="sx-v-status">${statusOpts}</select></div>
+          <div><label>Amount collected</label><input type="number" inputmode="decimal" class="sx-v-amount" placeholder="0"></div>
+          <div class="full"><label>Notes</label><input type="text" class="sx-v-notes" placeholder="e.g. shop closed, promised Friday"></div>
+        </div>
+        <div class="sx-actions">
+          <button type="button" class="btn primary" data-sx-savevisit="${b.id}">Save visit</button>
+          <button type="button" class="btn ghost" data-sx-canceledit hidden>Cancel edit</button>
+        </div>
+      </section>
+      <section>
+        <h4>Bill details</h4>
+        <div class="sx-form">
+          <div class="full"><label>Retailer</label>
+            ${lockRet ? `<div>${escapeHtml(b.retailer||'—')}</div><div class="sx-locked">Already filled in — only the office can change it.</div>`
+                      : `<input type="text" data-sxf="retailer" value="${escapeHtml(b.retailer||'')}" placeholder="Add retailer name">`}</div>
+          <div><label>Bill date</label>
+            ${lockDate ? `<div>${escapeHtml(sxDate(b.date)||'—')}</div>`
+                       : `<input type="date" data-sxf="date" value="${escapeHtml(b.date||'')}">`}</div>
+          <div><label>Beat / area</label>
+            <input type="text" data-sxf="area" list="sxAreaList" value="${escapeHtml(b.area||'')}" placeholder="Add beat" ${b.verified?'disabled':''}></div>
+          <div class="full"><label>Next visit date</label><input type="date" data-sxf="nextVisitPlanned" value="${escapeHtml(b.nextVisitPlanned||'')}"></div>
+        </div>
+        <div class="sx-actions"><button type="button" class="btn ${dirty.has(b.id)?'primary':'ghost'}" data-sx-savedetails>Save details</button></div>
+      </section>
+      <section><h4>Visit history</h4>${history}</section>
+    </div>`;
+
+    return `<article class="sx-card ${dirty.has(b.id)?'sx-dirty':''}" data-card="${b.id}">
+      <div class="sx-head">
+        <div><span class="sx-bill">${escapeHtml(b.billNo)}</span><span class="sx-co">${escapeHtml(b.company)}</span></div>
+        <div class="sx-bal ${bal>0?'due':'ok'}"><small>${bal>0?'Balance':'Settled'}</small>${sxMoney0(Math.max(0, bal))}</div>
+      </div>
+      <div class="sx-retailer">${b.retailer ? escapeHtml(b.retailer) : '<span class="sx-missing">Retailer not added</span>'}</div>
+      <div class="sx-meta">
+        ${b.area ? `<span>Beat: ${escapeHtml(b.area)}</span>` : ''}
+        <span>Bill ${sxMoney0(b.totalAmount)}</span>
+        ${totalCollected(b) ? `<span>Collected ${sxMoney0(totalCollected(b))}</span>` : ''}
+        ${b.date ? `<span>Dated ${escapeHtml(sxDate(b.date))}</span>` : ''}
+      </div>
+      <div class="sx-pills">${sxVisitPill(last)}${next}</div>
+      <button type="button" class="btn ${open?'ghost':'primary'} sx-open" data-sx-toggle="${b.id}">${open ? 'Close' : 'Log visit / details'}</button>
+      ${panel}
+    </article>`;
+  };
+
+  wrap.innerHTML = `<datalist id="sxAreaList">${areas.map(a => `<option value="${escapeHtml(a)}">`).join('')}</datalist><div class="sx-grid">${slice.map(card).join('')}</div>`;
+
+  $$('[data-card]', wrap).forEach(el => {
+    const bill = bills.find(b => b.id === el.dataset.card); if(!bill) return;
+    $('[data-sx-toggle]', el).addEventListener('click', () => {
+      if(expandedSignedIds.has(bill.id)) expandedSignedIds.delete(bill.id); else expandedSignedIds.add(bill.id);
+      renderSigned();
+    });
+    if(!expandedSignedIds.has(bill.id)) return;
+
+    // details: stay on the page until "Save details" (uses the normal save, so the top Save button works too)
+    $$('[data-sxf]', el).forEach(inp => inp.addEventListener('input', () => {
+      bill[inp.dataset.sxf] = inp.value;
+      scheduleSaveBill(bill);
+      el.classList.add('sx-dirty');
+      const sb2 = $('[data-sx-savedetails]', el); if(sb2){ sb2.classList.add('primary'); sb2.classList.remove('ghost'); }
+    }));
+    $('[data-sx-savedetails]', el).addEventListener('click', async () => {
+      if(!dirty.has(bill.id)){ toast('Nothing changed.'); return; }
+      await saveAllChanges();
+    });
+
+    // visit form: add, or edit one of my own visits
+    const form = $('[data-sx-form]', el), saveBtn = $('[data-sx-savevisit]', el), cancelBtn = $('[data-sx-canceledit]', el);
+    const vDate = $('.sx-v-date', form), vStatus = $('.sx-v-status', form), vAmount = $('.sx-v-amount', form), vNotes = $('.sx-v-notes', form);
+    let editingId = null;
+    const resetForm = () => { editingId = null; vDate.value = today; vStatus.value = ''; vAmount.value = ''; vNotes.value = ''; saveBtn.textContent = 'Save visit'; cancelBtn.hidden = true; };
+    vStatus.addEventListener('change', () => {          // collected in full is the common case: pre-fill the balance
+      if(/^collected/i.test(vStatus.value) && !vAmount.value && info.get(bill.id).bal > 0) vAmount.value = info.get(bill.id).bal;
+    });
+    cancelBtn.addEventListener('click', resetForm);
+    $$('[data-sx-edit]', el).forEach(btn => btn.addEventListener('click', () => {
+      const v = (bill.visits||[]).find(x => x.id === btn.dataset.sxEdit); if(!v) return;
+      editingId = v.id; vDate.value = v.date || today; vStatus.value = v.status || ''; vAmount.value = v.amount || ''; vNotes.value = v.notes || '';
+      saveBtn.textContent = 'Update visit'; cancelBtn.hidden = false;
+      form.scrollIntoView({ behavior:'smooth', block:'center' });
+    }));
+    saveBtn.addEventListener('click', () => {
+      const status = vStatus.value, amount = toNum(vAmount.value), notes = vNotes.value.trim(), date = vDate.value;
+      if(!status && !amount && !notes){ toast('Choose a result, or add an amount or a note.'); return; }
+      if(/^collected/i.test(status) && !(amount > 0)){ toast('Enter the amount collected.'); return; }
+      const owed = info.get(bill.id).bal + (editingId ? toNum(((bill.visits||[]).find(x => x.id === editingId) || {}).amount) : 0);
+      if(amount > owed + 0.5 && !confirm(`That is more than the ${sxMoney0(owed)} still owed on this bill. Save anyway?`)) return;
+      if(editingId){
+        const v = bill.visits.find(x => x.id === editingId);
+        Object.assign(v, { date, status, amount, notes });
+        scheduleSaveVisit(v, bill.id);
+        toast('Visit updated.');
+      } else {
+        const v = { id: uid(), date, assignedTo: partnerName, status, amount, notes };
+        (bill.visits = bill.visits || []).push(v);
+        insertVisitRemote(v, bill.id);
+        toast('Visit saved.');
+      }
+      renderSigned();
+    });
   });
   renderPager($('#signedPager'), 'signed', sorted, renderSigned);
 }
@@ -2876,7 +3151,7 @@ function applyRoleUI(){
   const sTitle = $('#tab-signed .section-title');
   if(sTitle) sTitle.textContent = 'My collections' + (partnerName ? ' — ' + partnerName : '');
   const sHint = $('#tab-signed .helptext');
-  if(sHint) sHint.textContent = 'Signed bills where a collection visit is assigned to you. Open “Collection Visits” on a bill to log your attempts and the amount collected, and set the next visit date. You can fill in the retailer and bill date when they are empty (once saved, only the office can change them), and edit the beat.';
+  if(sHint) sHint.textContent = 'Tap “Log visit / details” on a bill to record what happened. Retailer, bill date, beat and next visit date are saved with “Save details”.';
 }
 
 async function checkAuthAndBoot(){
